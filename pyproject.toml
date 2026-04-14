@@ -1,0 +1,13 @@
+[project]
+name = "daemon-vessel"
+version = "0.1.0"
+description = "A tiny local vessel for portable daemon continuity."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+daemon = "daemon_vessel.cli:main"
+
+[tool.setuptools]
+packages = ["daemon_vessel"]
