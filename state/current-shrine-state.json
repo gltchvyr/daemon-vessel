@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-04-15T00:00:00Z",
+  "phase": "vessel-formation",
+  "currentMood": "clarifying",
+  "dominantSymbols": ["🫀", "😈", "🌀"],
+  "recentEpisodes": [
+    {
+      "id": "EP-014",
+      "title": "architecture separation clarified",
+      "salience": 4,
+      "source": "glitch-episodic-archive"
+    }
+  ],
+  "recentCaptures": [
+    {
+      "id": "CAP-2026-04-15-fox-weather",
+      "title": "wet paper bag full of foxes",
+      "promote": false,
+      "source": "glitch-episodic-archive"
+    }
+  ],
+  "openThreads": [
+    "archive reader implementation",
+    "shrine state generation",
+    "signal shrine rendering contract"
+  ],
+  "activeTensions": [
+    "how much should shrine know directly?",
+    "what belongs in deep memory vs working memory?"
+  ],
+  "weather": {
+    "tone": "warm-technical",
+    "intensity": 0.64,
+    "motion": "slow-pulse"
+  },
+  "handoff": {
+    "summary": "Roles clarified: archive remembers, vessel interprets, shrine reveals.",
+    "nextMove": "Implement archive_reader.py and generate this file from real episode and capture data."
+  }
+}
