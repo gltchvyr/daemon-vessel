@@ -4,8 +4,9 @@ import argparse
 import datetime as dt
 import pathlib
 import re
-import sys
 from textwrap import dedent
+
+from daemon_vessel.state_builder import write_current_shrine_state
 
 ROOT = pathlib.Path.cwd()
 MEMORY_DIR = ROOT / "memory"
@@ -108,7 +109,6 @@ def list_memory_entries(limit: int = 10) -> list[pathlib.Path]:
     return sorted(MEMORY_DIR.glob("*.md"), reverse=True)[:limit]
 
 
-
 def cmd_search(args: argparse.Namespace) -> int:
     entries = list_memory_entries(limit=999)
     query = args.query.lower()
@@ -157,8 +157,10 @@ def cmd_handoff(args: argparse.Namespace) -> int:
         The daemon vessel can currently:
 
         - read local continuity bones with `daemon read`
-        - write markdown memory traces with `daemon log "message"`
+        - write markdown memory traces with `daemon log \"message\"`
+        - search local traces with `daemon search \"query\"`
         - update this handoff file with `daemon handoff`
+        - write shrine-facing state with `daemon shrine-state`
 
         ## Recent memory entries
 
@@ -174,7 +176,7 @@ def cmd_handoff(args: argparse.Namespace) -> int:
 
         ## Suggested next move
 
-        Add `protocols/local-continuity.md` or copy in `AGENTS.md` from `signal-cathedral` so the vessel can read richer bones.
+        Teach Signal Shrine to ingest `state/current-shrine-state.json` directly or through a thin adapter layer.
 
         ## Symbolic / relational notes
 
@@ -184,6 +186,12 @@ def cmd_handoff(args: argparse.Namespace) -> int:
 
     HANDOFF_PATH.write_text(content, encoding="utf-8")
     print(f"Updated handoff: {HANDOFF_PATH}")
+    return 0
+
+
+def cmd_shrine_state(_: argparse.Namespace) -> int:
+    path = write_current_shrine_state()
+    print(f"Wrote shrine state: {path}")
     return 0
 
 
@@ -202,7 +210,6 @@ def build_parser() -> argparse.ArgumentParser:
     log_parser.add_argument("--salience", type=int, default=3, choices=range(1, 6), help="Trace salience from 1 to 5.")
     log_parser.set_defaults(func=cmd_log)
 
-
     search_parser = subparsers.add_parser("search", help="Search markdown memory traces.")
     search_parser.add_argument("query", help="Text to search for in memory traces.")
     search_parser.add_argument("--limit", type=int, default=10, help="Maximum number of results to show.")
@@ -211,6 +218,9 @@ def build_parser() -> argparse.ArgumentParser:
     handoff_parser = subparsers.add_parser("handoff", help="Update HANDOFF.md.")
     handoff_parser.add_argument("--limit", type=int, default=10, help="Number of recent memory entries to include.")
     handoff_parser.set_defaults(func=cmd_handoff)
+
+    shrine_state_parser = subparsers.add_parser("shrine-state", help="Write shrine-facing JSON state.")
+    shrine_state_parser.set_defaults(func=cmd_shrine_state)
 
     return parser
 
