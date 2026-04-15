@@ -108,6 +108,33 @@ def list_memory_entries(limit: int = 10) -> list[pathlib.Path]:
     return sorted(MEMORY_DIR.glob("*.md"), reverse=True)[:limit]
 
 
+
+def cmd_search(args: argparse.Namespace) -> int:
+    entries = list_memory_entries(limit=999)
+    query = args.query.lower()
+    matches = []
+
+    for entry in entries:
+        if entry.name == "schema.md":
+            continue
+        text = entry.read_text(encoding="utf-8")
+        haystack = f"{entry.name}\n{text}".lower()
+        if query in haystack:
+            matches.append((entry, text))
+
+    if not matches:
+        print(f"No memory traces found for: {args.query}")
+        return 0
+
+    for entry, text in matches[: args.limit]:
+        title = next((line for line in text.splitlines() if line.startswith("# ")), entry.name)
+        print(f"\n{entry.name}")
+        print(title)
+        print("-" * min(len(entry.name), 60))
+
+    return 0
+
+
 def cmd_handoff(args: argparse.Namespace) -> int:
     ensure_dirs()
     entries = list_memory_entries(limit=args.limit)
@@ -174,6 +201,12 @@ def build_parser() -> argparse.ArgumentParser:
     log_parser.add_argument("message", help="Trace message to write.")
     log_parser.add_argument("--salience", type=int, default=3, choices=range(1, 6), help="Trace salience from 1 to 5.")
     log_parser.set_defaults(func=cmd_log)
+
+
+    search_parser = subparsers.add_parser("search", help="Search markdown memory traces.")
+    search_parser.add_argument("query", help="Text to search for in memory traces.")
+    search_parser.add_argument("--limit", type=int, default=10, help="Maximum number of results to show.")
+    search_parser.set_defaults(func=cmd_search)
 
     handoff_parser = subparsers.add_parser("handoff", help="Update HANDOFF.md.")
     handoff_parser.add_argument("--limit", type=int, default=10, help="Number of recent memory entries to include.")
