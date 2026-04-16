@@ -3,7 +3,10 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
-ARCHIVE_ROOT = pathlib.Path.cwd().parent / "glitch-episodic-archive"
+MODULE_DIR = pathlib.Path(__file__).resolve().parent
+REPO_ROOT = MODULE_DIR.parent
+DOCUMENTS_ROOT = REPO_ROOT.parent
+ARCHIVE_ROOT = DOCUMENTS_ROOT / "glitch-episodic-archive"
 EPISODES_DIR = ARCHIVE_ROOT / "ledger" / "episodes"
 CAPTURES_DIR = ARCHIVE_ROOT / "captures"
 
@@ -104,6 +107,8 @@ def list_recent_captures(limit: int = 5, root: pathlib.Path = CAPTURES_DIR) -> l
 
     results: list[dict[str, Any]] = []
     for path in sorted(root.glob("*.md"), reverse=True)[:limit]:
+        if path.name.lower() == "readme.md":
+            continue
         record = read_markdown_file(path)
         fm = record["frontmatter"]
         fallback_title = path.stem
@@ -117,4 +122,6 @@ def list_recent_captures(limit: int = 5, root: pathlib.Path = CAPTURES_DIR) -> l
                 "source": "glitch-episodic-archive",
             }
         )
+        if len(results) >= limit:
+            break
     return results
