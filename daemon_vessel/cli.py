@@ -153,7 +153,7 @@ def cmd_heartbeat(args: argparse.Namespace) -> int:
         id: {entry_id}
         kind: heartbeat
         summary: 'heartbeat cycle completed'
-        symbols: ["??", "??", "??"]
+        symbols: ["🫀", "😈", "🌀"]
         salience: {args.salience}
         source: cli
         created: {timestamp.isoformat()}
