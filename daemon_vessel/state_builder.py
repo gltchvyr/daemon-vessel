@@ -7,7 +7,9 @@ from typing import Any
 
 from daemon_vessel.archive_reader import list_recent_captures, list_recent_episodes
 
-STATE_DIR = pathlib.Path.cwd() / "state"
+MODULE_DIR = pathlib.Path(__file__).resolve().parent
+REPO_ROOT = MODULE_DIR.parent
+STATE_DIR = REPO_ROOT / "state"
 STATE_PATH = STATE_DIR / "current-shrine-state.json"
 HEARTBEAT_PATH = STATE_DIR / "heartbeat.json"
 
@@ -36,7 +38,7 @@ def _read_heartbeat(path: pathlib.Path = HEARTBEAT_PATH) -> dict[str, Any]:
         }
 
 
-def _write_heartbeat(path: pathlib.Path = HEARTBEAT_PATH) -> dict[str, Any]:
+def _write_heartbeat(path: pathlib.Path = HEARTBEAT_PATH, state_path: pathlib.Path = STATE_PATH) -> dict[str, Any]:
     heartbeat = _read_heartbeat(path)
     now = _now_iso()
     pulse_count = int(heartbeat.get("pulseCount", 0) or 0) + 1
@@ -44,7 +46,7 @@ def _write_heartbeat(path: pathlib.Path = HEARTBEAT_PATH) -> dict[str, Any]:
     updated = {
         "lastPulseAt": now,
         "pulseCount": pulse_count,
-        "lastStateWrite": str(STATE_PATH),
+        "lastStateWrite": str(state_path),
         "status": "alive",
     }
 
@@ -119,7 +121,7 @@ def build_current_shrine_state(heartbeat: dict[str, Any] | None = None) -> dict:
 def write_current_shrine_state(path: pathlib.Path = STATE_PATH) -> pathlib.Path:
     """Write the current shrine state JSON to disk and return the path."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    heartbeat = _write_heartbeat()
+    heartbeat = _write_heartbeat(state_path=path)
     state = build_current_shrine_state(heartbeat=heartbeat)
     path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
