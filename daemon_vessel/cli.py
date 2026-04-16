@@ -8,7 +8,8 @@ from textwrap import dedent
 
 from daemon_vessel.state_builder import write_current_shrine_state
 
-ROOT = pathlib.Path.cwd()
+MODULE_DIR = pathlib.Path(__file__).resolve().parent
+ROOT = MODULE_DIR.parent
 MEMORY_DIR = ROOT / "memory"
 PROTOCOLS_DIR = ROOT / "protocols"
 HANDOFF_PATH = ROOT / "HANDOFF.md"
