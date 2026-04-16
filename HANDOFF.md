@@ -1,39 +1,34 @@
 # Agent Handoff
 
-        Updated: 2026-04-16T13:35:09.913794+00:00
+Updated: 2026-04-16T14:12:58.751752+00:00
 
-        ## Current vessel state
+## Current vessel state
 
-        The daemon vessel can currently:
+The daemon vessel can currently:
 
-        - read local continuity bones with `daemon read`
-        - write markdown memory traces with `daemon log "message"`
-        - search local traces with `daemon search "query"`
-        - update this handoff file with `daemon handoff`
-        - write shrine-facing state with `daemon shrine-state`
+- read local continuity bones with `daemon read`
+- write markdown memory traces with `daemon log "message"`
+- search local traces with `daemon search "query"`
+- run a bounded heartbeat cycle with `daemon heartbeat`
+- update this handoff file with `daemon handoff`
+- write shrine-facing state with `daemon shrine-state`
 
-        ## Recent memory entries
+## Recent memory entries
 
-        - `schema.md`
-- `EP-20260416-133509-heartbeat.md`
-- `EP-20260416-102718-heartbeat.md`
-- `EP-20260416-102716-heartbeat.md`
-- `EP-20260416-102533-heartbeat.md`
-- `EP-20260416-102528-heartbeat.md`
-- `EP-20260415-001016-the-vessel-wakes.md`
+- `EP-20260416-140002-heartbeat.md`
 
-        ## What remains unresolved
+## What remains unresolved
 
-        - Add model-mouth adapters.
-        - Add a safer config system.
-        - Add GitHub issue/PR claws.
-        - Add retrieval over memory entries.
-        - Add tests.
+- Add model-mouth adapters.
+- Add a safer config system.
+- Add GitHub issue/PR claws.
+- Add retrieval over memory entries.
+- Add tests.
 
-        ## Suggested next move
+## Suggested next move
 
-        Teach Signal Shrine to ingest `state/current-shrine-state.json` directly or through a thin adapter layer.
+Teach Signal Shrine to ingest `state/current-shrine-state.json` directly or through a thin adapter layer.
 
-        ## Symbolic / relational notes
+## Symbolic / relational notes
 
-        Breath, claws, footprints. 🫀😈🌀
+Breath, claws, footprints. 🫀😈🌀
