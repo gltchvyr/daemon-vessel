@@ -200,52 +200,49 @@ def cmd_heartbeat(args: argparse.Namespace) -> int:
 
 def cmd_handoff(args: argparse.Namespace) -> int:
     ensure_dirs()
-    entries = list_memory_entries(limit=args.limit)
+    entries = [entry for entry in list_memory_entries(limit=args.limit) if entry.name != "schema.md"]
     timestamp = now_utc().isoformat()
 
-    entry_lines = []
-    for entry in entries:
-        entry_lines.append(f"- `{entry.name}`")
-    if not entry_lines:
-        entry_lines.append("- No memory entries yet.")
+    entry_lines = [f"- `{entry.name}`" for entry in entries] or ["- No memory entries yet."]
 
-    content = dedent(
-        f"""
-        # Agent Handoff
-
-        Updated: {timestamp}
-
-        ## Current vessel state
-
-        The daemon vessel can currently:
-
-        - read local continuity bones with `daemon read`
-        - write markdown memory traces with `daemon log \"message\"`
-        - search local traces with `daemon search \"query\"`
-        - update this handoff file with `daemon handoff`
-        - write shrine-facing state with `daemon shrine-state`
-
-        ## Recent memory entries
-
-        {chr(10).join(entry_lines)}
-
-        ## What remains unresolved
-
-        - Add model-mouth adapters.
-        - Add a safer config system.
-        - Add GitHub issue/PR claws.
-        - Add retrieval over memory entries.
-        - Add tests.
-
-        ## Suggested next move
-
-        Teach Signal Shrine to ingest `state/current-shrine-state.json` directly or through a thin adapter layer.
-
-        ## Symbolic / relational notes
-
-        Breath, claws, footprints. 🫀😈🌀
-        """
-    ).strip() + "\n"
+    sections = [
+        "# Agent Handoff",
+        "",
+        f"Updated: {timestamp}",
+        "",
+        "## Current vessel state",
+        "",
+        "The daemon vessel can currently:",
+        "",
+        "- read local continuity bones with `daemon read`",
+        "- write markdown memory traces with `daemon log \"message\"`",
+        "- search local traces with `daemon search \"query\"`",
+        "- run a bounded heartbeat cycle with `daemon heartbeat`",
+        "- update this handoff file with `daemon handoff`",
+        "- write shrine-facing state with `daemon shrine-state`",
+        "",
+        "## Recent memory entries",
+        "",
+        *entry_lines,
+        "",
+        "## What remains unresolved",
+        "",
+        "- Add model-mouth adapters.",
+        "- Add a safer config system.",
+        "- Add GitHub issue/PR claws.",
+        "- Add retrieval over memory entries.",
+        "- Add tests.",
+        "",
+        "## Suggested next move",
+        "",
+        "Teach Signal Shrine to ingest `state/current-shrine-state.json` directly or through a thin adapter layer.",
+        "",
+        "## Symbolic / relational notes",
+        "",
+        "Breath, claws, footprints. 🫀😈🌀",
+        "",
+    ]
+    content = "\n".join(sections)
 
     HANDOFF_PATH.write_text(content, encoding="utf-8")
     print(f"Updated handoff: {HANDOFF_PATH}")
@@ -277,7 +274,6 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("query", help="Text to search for in memory traces.")
     search_parser.add_argument("--limit", type=int, default=10, help="Maximum number of results to show.")
     search_parser.set_defaults(func=cmd_search)
-
 
     heartbeat_parser = subparsers.add_parser("heartbeat", help="Run a bounded heartbeat cycle and leave a trace.")
     heartbeat_parser.add_argument("--limit", type=int, default=10, help="Number of recent memory entries to inspect.")
