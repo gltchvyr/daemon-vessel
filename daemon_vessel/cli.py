@@ -135,6 +135,69 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def cmd_heartbeat(args: argparse.Namespace) -> int:
+    ensure_dirs()
+    timestamp = now_utc()
+    entry_id = timestamp.strftime("EP-%Y%m%d-%H%M%S")
+    path = MEMORY_DIR / f"{entry_id}-heartbeat.md"
+
+    bones = read_bones()
+    entries = [entry for entry in list_memory_entries(limit=args.limit) if entry.name != "schema.md"]
+    recent_lines = [f"- `{entry.name}`" for entry in entries] or ["- No memory entries yet."]
+    handoff_exists = HANDOFF_PATH.exists()
+
+    content = dedent(
+        f"""
+        ---
+        id: {entry_id}
+        kind: heartbeat
+        summary: 'heartbeat cycle completed'
+        symbols: ["??", "??", "??"]
+        salience: {args.salience}
+        source: cli
+        created: {timestamp.isoformat()}
+        ---
+
+        # heartbeat
+
+        ## What happened
+
+        The vessel ran a bounded heartbeat cycle.
+
+        ## Current state
+
+        - bones loaded: yes
+        - handoff present: {'yes' if handoff_exists else 'no'}
+        - recent trace count: {len(entries)}
+
+        ## Recent traces
+
+        {chr(10).join(recent_lines)}
+
+        ## Why it matters
+
+        Persistence is rhythm: wake, inspect, remember, mark, sleep.
+
+        ## Suggested next move
+
+        {'Run `daemon handoff` or re-run with `--update-handoff` to refresh shared context.' if not args.update_handoff else 'Review the refreshed handoff note.'}
+        """
+    ).strip() + "\n"
+
+    path.write_text(content, encoding="utf-8")
+    print(f"Wrote heartbeat trace: {path}")
+    print(f"Bones length: {len(bones)} characters")
+    print(f"Recent traces inspected: {len(entries)}")
+    print(f"Handoff present: {'yes' if handoff_exists else 'no'}")
+
+    if args.update_handoff:
+        handoff_args = argparse.Namespace(limit=args.limit)
+        cmd_handoff(handoff_args)
+
+    return 0
+
+
 def cmd_handoff(args: argparse.Namespace) -> int:
     ensure_dirs()
     entries = list_memory_entries(limit=args.limit)
@@ -214,6 +277,13 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("query", help="Text to search for in memory traces.")
     search_parser.add_argument("--limit", type=int, default=10, help="Maximum number of results to show.")
     search_parser.set_defaults(func=cmd_search)
+
+
+    heartbeat_parser = subparsers.add_parser("heartbeat", help="Run a bounded heartbeat cycle and leave a trace.")
+    heartbeat_parser.add_argument("--limit", type=int, default=10, help="Number of recent memory entries to inspect.")
+    heartbeat_parser.add_argument("--salience", type=int, default=2, choices=range(1, 6), help="Heartbeat trace salience from 1 to 5.")
+    heartbeat_parser.add_argument("--update-handoff", action="store_true", help="Refresh HANDOFF.md after writing the heartbeat trace.")
+    heartbeat_parser.set_defaults(func=cmd_heartbeat)
 
     handoff_parser = subparsers.add_parser("handoff", help="Update HANDOFF.md.")
     handoff_parser.add_argument("--limit", type=int, default=10, help="Number of recent memory entries to include.")
