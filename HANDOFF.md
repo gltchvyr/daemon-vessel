@@ -1,6 +1,6 @@
 # Agent Handoff
 
-        Updated: 2026-04-16T10:25:33.602357+00:00
+        Updated: 2026-04-16T10:27:18.210988+00:00
 
         ## Current vessel state
 
@@ -15,6 +15,8 @@
         ## Recent memory entries
 
         - `schema.md`
+- `EP-20260416-102718-heartbeat.md`
+- `EP-20260416-102716-heartbeat.md`
 - `EP-20260416-102533-heartbeat.md`
 - `EP-20260416-102528-heartbeat.md`
 - `EP-20260415-001016-the-vessel-wakes.md`
