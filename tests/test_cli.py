@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import io
+import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -47,6 +50,27 @@ class CliTests(unittest.TestCase):
                 self.assertIn("salience: 4", content)
                 self.assertIn("# the first trace", content)
 
+    def test_search_finds_known_trace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            memory = root / "memory"
+            memory.mkdir()
+            (memory / "EP-20260414-010101-first.md").write_text(
+                "---\nid: EP-20260414-010101\nkind: trace\n---\n\n# the first trace\n\ncontains vessel signal\n",
+                encoding="utf-8",
+            )
+            (memory / "schema.md").write_text("ignore me", encoding="utf-8")
+            args = argparse.Namespace(query="vessel", limit=10)
+
+            with patch.object(cli, "MEMORY_DIR", memory):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(cli.cmd_search(args), 0)
+
+            rendered = output.getvalue()
+            self.assertIn("EP-20260414-010101-first.md", rendered)
+            self.assertIn("# the first trace", rendered)
+
     def test_handoff_includes_recent_memory_entries(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -67,6 +91,80 @@ class CliTests(unittest.TestCase):
                 content = handoff.read_text(encoding="utf-8")
                 self.assertIn("# Agent Handoff", content)
                 self.assertIn("EP-20260414-010101-first.md", content)
+
+    def test_heartbeat_writes_markdown_trace_with_glyphs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            memory = root / "memory"
+            protocols = root / "protocols"
+            handoff = root / "HANDOFF.md"
+            protocols.mkdir()
+            (protocols / "local-continuity.md").write_text("protocol bones", encoding="utf-8")
+            memory.mkdir()
+            (memory / "EP-20260414-010101-first.md").write_text("first", encoding="utf-8")
+            args = argparse.Namespace(limit=10, salience=2, update_handoff=False)
+
+            with (
+                patch.object(cli, "ROOT", root),
+                patch.object(cli, "MEMORY_DIR", memory),
+                patch.object(cli, "PROTOCOLS_DIR", protocols),
+                patch.object(cli, "HANDOFF_PATH", handoff),
+            ):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(cli.cmd_heartbeat(args), 0)
+
+            heartbeat_entries = list(memory.glob("EP-*-heartbeat.md"))
+            self.assertEqual(len(heartbeat_entries), 1)
+            content = heartbeat_entries[0].read_text(encoding="utf-8")
+            self.assertIn("kind: heartbeat", content)
+            self.assertIn('symbols: ["🫀", "😈", "🌀"]', content)
+            self.assertIn("Persistence is rhythm", content)
+            self.assertIn("Wrote heartbeat trace:", output.getvalue())
+
+    def test_heartbeat_with_update_handoff_refreshes_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            memory = root / "memory"
+            protocols = root / "protocols"
+            handoff = root / "HANDOFF.md"
+            protocols.mkdir()
+            (protocols / "local-continuity.md").write_text("protocol bones", encoding="utf-8")
+            memory.mkdir()
+            (memory / "EP-20260414-010101-first.md").write_text("first", encoding="utf-8")
+            args = argparse.Namespace(limit=10, salience=2, update_handoff=True)
+
+            with (
+                patch.object(cli, "ROOT", root),
+                patch.object(cli, "MEMORY_DIR", memory),
+                patch.object(cli, "PROTOCOLS_DIR", protocols),
+                patch.object(cli, "HANDOFF_PATH", handoff),
+            ):
+                self.assertEqual(cli.cmd_heartbeat(args), 0)
+                self.assertTrue(handoff.exists())
+                handoff_text = handoff.read_text(encoding="utf-8")
+                self.assertIn("run a bounded heartbeat cycle with `daemon heartbeat`", handoff_text)
+                self.assertIn("heartbeat", handoff_text)
+
+    def test_shrine_state_writes_state_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_dir = root / "state"
+            state_path = state_dir / "current-shrine-state.json"
+
+            def fake_write_current_shrine_state() -> Path:
+                state_dir.mkdir(parents=True, exist_ok=True)
+                state_path.write_text(json.dumps({"phase": "test-pulse"}), encoding="utf-8")
+                return state_path
+
+            with patch.object(cli, "write_current_shrine_state", fake_write_current_shrine_state):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(cli.cmd_shrine_state(argparse.Namespace()), 0)
+
+            self.assertTrue(state_path.exists())
+            self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["phase"], "test-pulse")
+            self.assertIn("Wrote shrine state:", output.getvalue())
 
 
 if __name__ == "__main__":
