@@ -136,7 +136,6 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
-
 def cmd_heartbeat(args: argparse.Namespace) -> int:
     ensure_dirs()
     timestamp = now_utc()
@@ -250,8 +249,9 @@ def cmd_handoff(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_shrine_state(_: argparse.Namespace) -> int:
-    path = write_current_shrine_state()
+def cmd_shrine_state(args: argparse.Namespace) -> int:
+    output_path = pathlib.Path(args.out).expanduser() if args.out else None
+    path = write_current_shrine_state(path=output_path) if output_path else write_current_shrine_state()
     print(f"Wrote shrine state: {path}")
     return 0
 
@@ -287,6 +287,10 @@ def build_parser() -> argparse.ArgumentParser:
     handoff_parser.set_defaults(func=cmd_handoff)
 
     shrine_state_parser = subparsers.add_parser("shrine-state", help="Write shrine-facing JSON state.")
+    shrine_state_parser.add_argument(
+        "--out",
+        help="Optional output path for exporting shrine state, e.g. ../signal-shrine-prototype/public/daemon/current-shrine-state.json.",
+    )
     shrine_state_parser.set_defaults(func=cmd_shrine_state)
 
     return parser
