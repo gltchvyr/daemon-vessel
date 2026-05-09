@@ -79,7 +79,7 @@ Capture closing state and then run handoff separately.
 
 ```bash
 daemon-hook capture --harness generic --event SessionEnd
- daemon handoff
+daemon handoff
 ```
 
 ## Design rule
