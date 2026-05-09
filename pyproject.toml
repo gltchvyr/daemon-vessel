@@ -8,6 +8,7 @@ dependencies = []
 
 [project.scripts]
 daemon = "daemon_vessel.cli:main"
+daemon-lifecycle = "daemon_vessel.lifecycle:main"
 
 [tool.setuptools]
 packages = ["daemon_vessel"]
