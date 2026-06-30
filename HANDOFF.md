@@ -1,6 +1,6 @@
 # Agent Handoff
 
-Updated: 2026-06-29T08:23:38.962969+00:00
+Updated: 2026-06-30T07:02:05.647972+00:00
 
 ## Current vessel state
 
@@ -16,6 +16,7 @@ The daemon vessel can currently:
 
 ## Recent memory entries
 
+- `EP-20260630-070205-heartbeat.md`
 - `EP-20260629-082338-heartbeat.md`
 - `EP-20260628-070902-heartbeat.md`
 - `EP-20260627-063454-heartbeat.md`
@@ -24,7 +25,6 @@ The daemon vessel can currently:
 - `EP-20260624-065536-heartbeat.md`
 - `EP-20260623-065755-heartbeat.md`
 - `EP-20260622-091923-heartbeat.md`
-- `EP-20260621-080759-heartbeat.md`
 
 ## What remains unresolved
 
