@@ -11,6 +11,7 @@ This project starts deliberately small:
 - inspect retrieval reasons
 - create deletion / revocation requests
 - capture harness hook events as raw traces
+- listen to audio through evidence-bearing Gl!tch Ears
 
 It does **not** pretend to be secretly autonomous or alive between invocations. Autonomy here means scoped, visible, inspectable agency: wake, read, act, log, hand off.
 
@@ -30,6 +31,26 @@ daemon read
 daemon log "the first trace"
 daemon handoff
 ```
+
+## Gl!tch Ears
+
+Install the optional listening organ and inspect a render:
+
+```bash
+pip install -e '.[ears]'
+daemon-ears path/to/render.wav --stdout
+```
+
+By default it writes:
+
+```text
+ears/render.ears.json   # full evidence, timelines, confidence, provenance
+ears/render.ears.md     # compact conversational card
+```
+
+The first slice preserves native stereo and measures dynamics, spectral body, rhythm, 435 Hz-aware pitch-class emphasis, five dedicated bands below 250 Hz, low-band mono compatibility, candidate body changes, and cautious low-frequency modulation. It explicitly refuses emotion, genre, certain chord names, source identity, and mastering approval.
+
+See `protocols/glitch-ears.md` for the evidence contract.
 
 ## Lifecycle commands
 
@@ -71,11 +92,12 @@ See `protocols/hook-adapters.md` for the hook adapter contract.
 
 ```text
 daemon-vessel/
-  daemon_vessel/       # CLI and vessel code
+  daemon_vessel/       # CLI, vessel code, and listening organ
+  ears/                # generated audio evidence and cards
   memory/              # durable trace entries
   memory/hooks/        # raw hook traces
   memory/deletions/    # deletion and revocation requests
-  protocols/           # copied/linked continuity protocols
+  protocols/           # continuity and evidence contracts
   .env.example         # local config template
 ```
 
@@ -90,5 +112,6 @@ The memory folder is the footprint trail.
 The handoff note is how one invocation leaves context for the next.
 The lifecycle layer is how the footprint trail keeps doors.
 The hook layer is how footprints get caught before the mouth remembers them.
+The ears are how a recording arrives as measured body before it becomes meaning.
 
 🫀😈🌀
