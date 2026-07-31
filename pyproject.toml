@@ -6,10 +6,20 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+ears = [
+  "librosa>=0.11",
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "soundfile>=0.12",
+]
+
 [project.scripts]
 daemon = "daemon_vessel.cli:main"
 daemon-lifecycle = "daemon_vessel.lifecycle:main"
 daemon-hook = "daemon_vessel.hooks:main"
+daemon-ears = "daemon_vessel.ears:main"
 
 [tool.setuptools]
 packages = ["daemon_vessel"]
