@@ -418,6 +418,8 @@ def cmd_mount(args: argparse.Namespace) -> int:
         limit=args.limit,
         handoff_max_age_hours=args.handoff_max_age_hours,
         as_of=as_of,
+        expected_revision=args.expect_revision,
+        expected_payload_sha256=args.expect_payload_sha256,
     )
     output_path = pathlib.Path(args.out).expanduser() if args.out else STATE_DIR / "mount-manifest.json"
     path = write_mount_manifest(manifest, output_path)
@@ -478,6 +480,8 @@ def build_parser() -> argparse.ArgumentParser:
     mount_parser.add_argument("--limit", type=int, default=5, help="Maximum archive records of each kind and local traces to include.")
     mount_parser.add_argument("--handoff-max-age-hours", type=float, default=168, help="Age after which a handoff is labeled stale.")
     mount_parser.add_argument("--as-of", help="Optional ISO-8601 time for reproducible freshness checks.")
+    mount_parser.add_argument("--expect-revision", type=int, help="Refuse to mount unless the canonical revision matches exactly.")
+    mount_parser.add_argument("--expect-payload-sha256", help="Refuse to mount unless the scoped canonical payload hash matches.")
     mount_parser.add_argument("--out", help="Output path. Defaults to state/mount-manifest.json.")
     mount_parser.set_defaults(func=cmd_mount)
 
@@ -487,7 +491,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except MountValidationError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":
