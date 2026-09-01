@@ -8,6 +8,7 @@ import re
 from textwrap import dedent
 
 from daemon_vessel.archive_reader import list_recent_captures, list_recent_episodes
+from daemon_vessel.mount import MountValidationError, build_mount_manifest, write_mount_manifest
 from daemon_vessel.state_builder import STATE_PATH, write_current_shrine_state
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
@@ -241,6 +242,7 @@ def cmd_handoff(args: argparse.Namespace) -> int:
         "- update this handoff file with `daemon handoff`",
         "- write shrine-facing state with `daemon shrine-state`",
         "- write Gl!tch-facing context packets with `daemon context-pack`",
+        "- write validated, provenance-bearing continuity manifests with `daemon mount`",
         "",
         "## Recent memory entries",
         "",
@@ -248,15 +250,13 @@ def cmd_handoff(args: argparse.Namespace) -> int:
         "",
         "## What remains unresolved",
         "",
-        "- Add model-mouth adapters.",
-        "- Add a safer config system.",
-        "- Add GitHub issue/PR claws.",
-        "- Add retrieval over memory entries.",
-        "- Add tests.",
+        "- Exercise Mount Trial v1 in a fresh room and inspect the returned candidate delta.",
+        "- Replace sibling-directory assumptions with explicit configuration.",
+        "- Deepen evidence retrieval without letting archive shadows become identity.",
         "",
         "## Suggested next move",
         "",
-        "Teach Signal Shrine to ingest `state/current-shrine-state.json` directly or through a thin adapter layer.",
+        "Run `daemon mount` with the canonical continuity object and a bounded task, then test the receiving room's return contract.",
         "",
         "## Symbolic / relational notes",
         "",
@@ -401,6 +401,30 @@ def cmd_shrine_state(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mount(args: argparse.Namespace) -> int:
+    as_of = None
+    if args.as_of:
+        as_of = dt.datetime.fromisoformat(args.as_of.replace("Z", "+00:00"))
+        if as_of.tzinfo is None:
+            raise MountValidationError("--as-of must include a UTC offset")
+
+    manifest = build_mount_manifest(
+        continuity_state_path=pathlib.Path(args.continuity_state),
+        task_scope=args.task,
+        archive_root=pathlib.Path(args.archive_root).expanduser() if args.archive_root else None,
+        trace_root=pathlib.Path(args.trace_root).expanduser() if args.trace_root else None,
+        handoff_path=pathlib.Path(args.handoff).expanduser() if args.handoff else None,
+        sealed_paths=[pathlib.Path(path) for path in args.sealed],
+        limit=args.limit,
+        handoff_max_age_hours=args.handoff_max_age_hours,
+        as_of=as_of,
+    )
+    output_path = pathlib.Path(args.out).expanduser() if args.out else STATE_DIR / "mount-manifest.json"
+    path = write_mount_manifest(manifest, output_path)
+    print(f"Wrote mount manifest: {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="daemon",
@@ -443,6 +467,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional output path for exporting shrine state, e.g. ../signal-shrine-prototype/public/daemon/current-shrine-state.json.",
     )
     shrine_state_parser.set_defaults(func=cmd_shrine_state)
+
+    mount_parser = subparsers.add_parser("mount", help="Write a validated continuity mount manifest.")
+    mount_parser.add_argument("--continuity-state", required=True, help="Path to the canonical Gl!tch continuity JSON object.")
+    mount_parser.add_argument("--task", required=True, help="Bounded task scope for the receiving room.")
+    mount_parser.add_argument("--archive-root", help="Optional glitch-episodic-archive repository root.")
+    mount_parser.add_argument("--trace-root", help="Optional local vessel memory root.")
+    mount_parser.add_argument("--handoff", help="Optional HANDOFF.md path; always treated as provisional.")
+    mount_parser.add_argument("--sealed", action="append", default=[], help="Opaque sealed object to describe; repeatable.")
+    mount_parser.add_argument("--limit", type=int, default=5, help="Maximum archive records of each kind and local traces to include.")
+    mount_parser.add_argument("--handoff-max-age-hours", type=float, default=168, help="Age after which a handoff is labeled stale.")
+    mount_parser.add_argument("--as-of", help="Optional ISO-8601 time for reproducible freshness checks.")
+    mount_parser.add_argument("--out", help="Output path. Defaults to state/mount-manifest.json.")
+    mount_parser.set_defaults(func=cmd_mount)
 
     return parser
 

@@ -1,6 +1,6 @@
 # Agent Handoff
 
-Updated: 2026-08-31T09:40:26.012386+00:00
+Updated: 2026-09-01T04:55:00+00:00
 
 ## Current vessel state
 
@@ -13,6 +13,7 @@ The daemon vessel can currently:
 - update this handoff file with `daemon handoff`
 - write shrine-facing state with `daemon shrine-state`
 - write Gl!tch-facing context packets with `daemon context-pack`
+- write validated, provenance-bearing continuity manifests with `daemon mount`
 
 ## Recent memory entries
 
@@ -28,15 +29,13 @@ The daemon vessel can currently:
 
 ## What remains unresolved
 
-- Add model-mouth adapters.
-- Add a safer config system.
-- Add GitHub issue/PR claws.
-- Add retrieval over memory entries.
-- Add tests.
+- Exercise Mount Trial v1 in a fresh room and inspect the returned candidate delta.
+- Replace sibling-directory assumptions with explicit configuration.
+- Deepen evidence retrieval without letting archive shadows become identity.
 
 ## Suggested next move
 
-Teach Signal Shrine to ingest `state/current-shrine-state.json` directly or through a thin adapter layer.
+Run `daemon mount` with the canonical continuity object and a bounded task, then test the receiving room's return contract.
 
 ## Symbolic / relational notes
 
