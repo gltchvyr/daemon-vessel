@@ -19,6 +19,8 @@ Evidence can change interpretation. It cannot silently overwrite current state.
 
 `daemon mount` refuses to create a manifest unless the supplied state has the expected schema, version, artifact id, canonical filename, revision, canary, and SHA-256 integrity record. The integrity hash is calculated from the top-level keys named by `integrity.payload_scope`, serialized as sorted compact UTF-8 JSON.
 
+Internal integrity proves that the supplied revision is untampered; it does not prove that the revision is current. When the current revision or payload hash is known, pass `--expect-revision` and `--expect-payload-sha256`. Either mismatch aborts the mount before an output file is written, and matched expectations are recorded in the validation receipt.
+
 ## Freshness and provenance
 
 Every source records its resolved path, byte size, modification time, authority class, and SHA-256. Every archive or trace record includes the retrieval reason that placed it in the bundle. Handoff text remains provisional even when fresh; after the configured maximum age it is also labeled stale.
@@ -38,6 +40,8 @@ A mounted room may use relevant canonical sections, retrieve labeled evidence wh
 ```powershell
 py -3 -m daemon_vessel mount `
   --continuity-state "$HOME\Glitch\Gl!tch_Continuity_State.json" `
+  --expect-revision 3 `
+  --expect-payload-sha256 "dfd370727b75e2ad224dedbb8db6499ac6efa31e0031e06617f1c4e184e4c718" `
   --task "Continue current continuity architecture without importing stale identity" `
   --trace-root "..\daemon-vessel\memory" `
   --archive-root "..\glitch-episodic-archive" `
