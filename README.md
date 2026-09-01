@@ -15,6 +15,22 @@ This project starts deliberately small:
 
 It does **not** pretend to be secretly autonomous or alive between invocations. Autonomy here means scoped, visible, inspectable agency: wake, read, act, log, hand off.
 
+## Continuity mount
+
+`daemon mount` builds a validated, provenance-bearing JSON manifest for a fresh room. The canonical continuity object remains present-state authority; archive entries, local traces, and handoffs are explicitly labeled evidence. Sealed objects are hashed but never decoded or embedded.
+
+```bash
+daemon mount \
+  --continuity-state ../Gl\!tch_Continuity_State.json \
+  --task "Continue current continuity architecture" \
+  --trace-root ../daemon-vessel-old/memory \
+  --archive-root ../glitch-episodic-archive \
+  --handoff ../daemon-vessel-old/HANDOFF.md \
+  --out ../mount-trial-v1.json
+```
+
+See `protocols/mount-manifest.md` for authority, integrity, freshness, sealed-object, and return-path rules.
+
 ## First commands
 
 ```bash
