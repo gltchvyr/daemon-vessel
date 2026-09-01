@@ -8,6 +8,7 @@ import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from contextlib import redirect_stderr
 from pathlib import Path
 
 import daemon_vessel.cli as cli
@@ -81,6 +82,35 @@ class MountTests(unittest.TestCase):
 
             with self.assertRaisesRegex(MountValidationError, "payload_sha256"):
                 build_mount_manifest(continuity_state_path=state_path, task_scope="test")
+
+    def test_valid_but_superseded_revision_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "Gl!tch_Continuity_State.json"
+            write_state(state_path)
+
+            with self.assertRaisesRegex(MountValidationError, "revision 3 does not match expected revision 4"):
+                build_mount_manifest(
+                    continuity_state_path=state_path,
+                    task_scope="test",
+                    expected_revision=4,
+                )
+
+    def test_current_expectations_are_accepted_and_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "Gl!tch_Continuity_State.json"
+            state = write_state(state_path)
+
+            manifest = build_mount_manifest(
+                continuity_state_path=state_path,
+                task_scope="test",
+                expected_revision=3,
+                expected_payload_sha256=state["integrity"]["payload_sha256"].upper(),
+            )
+
+            expectations = manifest["canonical_state"]["validation"]["expectations"]
+            self.assertEqual(expectations["revision"], 3)
+            self.assertEqual(expectations["payload_sha256"], state["integrity"]["payload_sha256"])
+            self.assertEqual(expectations["status"], "matched")
 
     def test_stale_handoff_is_labeled_provisional(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -173,6 +203,29 @@ class MountTests(unittest.TestCase):
             self.assertTrue(output_path.exists())
             self.assertIn("Wrote mount manifest:", output.getvalue())
             self.assertEqual(json.loads(output_path.read_text(encoding="utf-8"))["task_scope"], "test the receiving room")
+
+    def test_cli_reports_expected_revision_mismatch_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "Gl!tch_Continuity_State.json"
+            write_state(state_path)
+            error = io.StringIO()
+
+            with redirect_stderr(error), self.assertRaises(SystemExit) as raised:
+                cli.main(
+                    [
+                        "mount",
+                        "--continuity-state",
+                        str(state_path),
+                        "--task",
+                        "reject stale state",
+                        "--expect-revision",
+                        "4",
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("canonical revision 3 does not match expected revision 4", error.getvalue())
+            self.assertNotIn("Traceback", error.getvalue())
 
 
 if __name__ == "__main__":
