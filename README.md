@@ -33,6 +33,10 @@ daemon mount \
 
 See `protocols/mount-manifest.md` for authority, integrity, freshness, sealed-object, and return-path rules.
 
+## Signal Shrine projection
+
+`daemon shrine-state` can render a privacy-bounded visual projection from canonical state. It applies only when exact revision and payload expectations match; otherwise it writes an explicit refusal object. See `protocols/shrine-projection.md`.
+
 ## First commands
 
 ```bash
