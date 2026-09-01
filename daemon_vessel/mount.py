@@ -206,6 +206,8 @@ def build_mount_manifest(
     limit: int = 5,
     handoff_max_age_hours: float = 168,
     as_of: dt.datetime | None = None,
+    expected_revision: int | None = None,
+    expected_payload_sha256: str | None = None,
 ) -> dict[str, Any]:
     if not task_scope.strip():
         raise MountValidationError("task_scope must be non-empty")
@@ -223,6 +225,22 @@ def build_mount_manifest(
     if not isinstance(state, dict):
         raise MountValidationError("canonical continuity state must be a JSON object")
     validation = validate_continuity_state(state)
+
+    if expected_revision is not None and validation["revision"] != expected_revision:
+        raise MountValidationError(
+            f"canonical revision {validation['revision']} does not match expected revision {expected_revision}"
+        )
+    if expected_payload_sha256 is not None:
+        expected_hash = expected_payload_sha256.strip().lower()
+        if validation["payload_sha256"] != expected_hash:
+            raise MountValidationError(
+                "canonical payload SHA-256 does not match the expected current payload"
+            )
+    validation["expectations"] = {
+        "revision": expected_revision,
+        "payload_sha256": expected_payload_sha256.strip().lower() if expected_payload_sha256 else None,
+        "status": "matched",
+    }
 
     return {
         "schema": MANIFEST_SCHEMA,
