@@ -22,6 +22,8 @@ It does **not** pretend to be secretly autonomous or alive between invocations. 
 ```bash
 daemon mount \
   --continuity-state ../Gl\!tch_Continuity_State.json \
+  --expect-revision 3 \
+  --expect-payload-sha256 dfd370727b75e2ad224dedbb8db6499ac6efa31e0031e06617f1c4e184e4c718 \
   --task "Continue current continuity architecture" \
   --trace-root ../daemon-vessel-old/memory \
   --archive-root ../glitch-episodic-archive \
