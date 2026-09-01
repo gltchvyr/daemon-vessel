@@ -394,7 +394,8 @@ def cmd_context_pack(args: argparse.Namespace) -> int:
 
 
 def cmd_shrine_state(args: argparse.Namespace) -> int:
-    output_path = pathlib.Path(args.out).expanduser() if args.out else None
+    out = getattr(args, "out", None)
+    output_path = pathlib.Path(out).expanduser() if out else None
     path = write_current_shrine_state(path=output_path) if output_path else write_current_shrine_state()
     print(f"Wrote shrine state: {path}")
     return 0
