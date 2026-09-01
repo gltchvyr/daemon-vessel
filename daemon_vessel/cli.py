@@ -396,9 +396,23 @@ def cmd_context_pack(args: argparse.Namespace) -> int:
 def cmd_shrine_state(args: argparse.Namespace) -> int:
     out = getattr(args, "out", None)
     output_path = pathlib.Path(out).expanduser() if out else None
-    path = write_current_shrine_state(path=output_path) if output_path else write_current_shrine_state()
-    print(f"Wrote shrine state: {path}")
-    return 0
+    continuity_state = getattr(args, "continuity_state", None)
+    kwargs = {
+        "continuity_state_path": pathlib.Path(continuity_state).expanduser() if continuity_state else None,
+        "expected_revision": getattr(args, "expect_revision", None),
+        "expected_payload_sha256": getattr(args, "expect_payload_sha256", None),
+    }
+    if output_path:
+        path = write_current_shrine_state(path=output_path, **kwargs)
+    elif any(value is not None for value in kwargs.values()):
+        path = write_current_shrine_state(**kwargs)
+    else:
+        # Preserve the original zero-argument library seam.
+        path = write_current_shrine_state()
+    state = json.loads(path.read_text(encoding="utf-8"))
+    refused = state.get("schema") == "gltch.shrine-projection" and not state.get("applyAllowed", False)
+    print(f"Wrote {'refusal ' if refused else ''}shrine state: {path}")
+    return 2 if refused and continuity_state else 0
 
 
 def cmd_mount(args: argparse.Namespace) -> int:
@@ -463,7 +477,10 @@ def build_parser() -> argparse.ArgumentParser:
     context_pack_parser.add_argument("--refresh-state", action="store_true", help="Refresh shrine state before writing the packet.")
     context_pack_parser.set_defaults(func=cmd_context_pack)
 
-    shrine_state_parser = subparsers.add_parser("shrine-state", help="Write shrine-facing JSON state.")
+    shrine_state_parser = subparsers.add_parser("shrine-state", help="Write a bounded, currency-gated shrine projection.")
+    shrine_state_parser.add_argument("--continuity-state", help="Canonical Gl!tch continuity JSON object to project.")
+    shrine_state_parser.add_argument("--expect-revision", type=int, help="Required exact canonical revision.")
+    shrine_state_parser.add_argument("--expect-payload-sha256", help="Required exact scoped canonical payload hash.")
     shrine_state_parser.add_argument(
         "--out",
         help="Optional output path for exporting shrine state, e.g. ../signal-shrine-prototype/public/daemon/current-shrine-state.json.",
