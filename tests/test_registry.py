@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -43,11 +45,11 @@ def payload(resources: list | None = None) -> dict:
 
 
 class RegistryTests(unittest.TestCase):
-    def write_inputs(self, root: Path, value: dict | None = None) -> tuple[Path, Path, str]:
+    def write_inputs(self, root: Path, value: dict | None = None, schema_value: dict | None = None) -> tuple[Path, Path, str]:
         root.mkdir(parents=True, exist_ok=True)
         source, schema = root / "resources.json", root / "resource-registry.schema.json"
         source.write_text(json.dumps(value or payload()), encoding="utf-8")
-        schema.write_text(json.dumps(SCHEMA), encoding="utf-8")
+        schema.write_text(json.dumps(schema_value or SCHEMA), encoding="utf-8")
         return source, schema, hashlib.sha256(source.read_bytes()).hexdigest()
 
     def install(self, root: Path, home: Path, value: dict | None = None, **kwargs) -> tuple[Path, Path, str]:
@@ -76,6 +78,55 @@ class RegistryTests(unittest.TestCase):
             with self.assertRaises(RegistrySchemaError):
                 registry.install(source=source, schema_source=schema, expected_sha256=digest, home=home)
             self.assertFalse(home.exists())
+
+    def test_invalid_date_time_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); value = payload(); value["generated_at"] = "not-a-date"
+            source, schema, digest = self.write_inputs(root, value)
+            with self.assertRaises(RegistrySchemaError) as caught:
+                registry.install(source=source, schema_source=schema, expected_sha256=digest, home=root / "home")
+            self.assertIn("(format)", str(caught.exception))
+
+    def test_validation_errors_never_leak_private_values_to_exception_or_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); sentinel = "PRIVATE-SENTINEL-DO-NOT-LEAK"
+            value = payload([resource()]); value["resources"][0]["title"] = sentinel
+            schema_value = json.loads(json.dumps(SCHEMA))
+            schema_value["properties"]["resources"]["items"]["properties"]["title"] = {"const": "allowed"}
+            source, schema, digest = self.write_inputs(root, value, schema_value)
+            with self.assertRaises(RegistrySchemaError) as caught:
+                registry.install(source=source, schema_source=schema, expected_sha256=digest, home=root / "home")
+            self.assertNotIn(sentinel, str(caught.exception))
+            error_output = io.StringIO()
+            with redirect_stderr(error_output), self.assertRaises(SystemExit):
+                cli.main(["registry", "install", "--source", str(source), "--schema", str(schema), "--expect-sha256", digest, "--home", str(root / "other-home")])
+            self.assertNotIn(sentinel, error_output.getvalue())
+
+    def test_external_reference_refuses_without_network_access(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); schema_value = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://example.test/external-ref.json", "$ref": "https://example.invalid/private-schema.json"}
+            source, schema, digest = self.write_inputs(root, schema_value=schema_value)
+            with patch("urllib.request.urlopen", side_effect=AssertionError("network attempted")) as urlopen:
+                with self.assertRaises(RegistrySchemaError) as caught:
+                    registry.install(source=source, schema_source=schema, expected_sha256=digest, home=root / "home")
+            urlopen.assert_not_called()
+            self.assertEqual(str(caught.exception), "refused: unresolved schema reference")
+
+    def test_missing_malformed_and_unreadable_inputs_refuse_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); source, schema, digest = self.write_inputs(root)
+            with self.assertRaises(registry.MissingRegistryFileError):
+                registry.install(source=root / "missing.json", schema_source=schema, expected_sha256=digest, home=root / "missing-home")
+            source.write_bytes(b"\xff")
+            with self.assertRaises(RegistrySchemaError) as caught:
+                registry.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(b"\xff").hexdigest(), home=root / "home")
+            self.assertEqual(str(caught.exception), "refused: unreadable source registry")
+            source.write_text("{", encoding="utf-8")
+            with self.assertRaises(RegistrySchemaError):
+                registry.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=root / "home")
+            with patch.object(Path, "read_bytes", side_effect=OSError("blocked")):
+                with self.assertRaises(registry.MissingRegistryFileError):
+                    registry.install(source=source, schema_source=schema, expected_sha256="0" * 64, home=root / "other-home")
 
     def test_resolved_without_locator_and_unresolved_with_locator_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -106,10 +157,15 @@ class RegistryTests(unittest.TestCase):
     def test_existing_installation_requires_replace_and_replacement_backs_up(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); home = root / "continuity"; source, schema, digest = self.install(root, home)
+            paths = registry.resolve_home(home)
+            original = {path.relative_to(home): path.read_bytes() for path in (paths.schema, paths.registry, paths.digest, paths.receipt)}
             with self.assertRaises(RegistryError):
                 registry.install(source=source, schema_source=schema, expected_sha256=digest, home=home)
             registry.install(source=source, schema_source=schema, expected_sha256=digest, home=home, replace=True)
-            self.assertTrue(list(home.glob("registry-backup-*")))
+            backups = list(home.glob("registry-backup-*"))
+            self.assertEqual(len(backups), 1)
+            for relative, content in original.items():
+                self.assertEqual((backups[0] / relative).read_bytes(), content)
 
     def test_validate_detects_registry_and_schema_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -119,6 +175,14 @@ class RegistryTests(unittest.TestCase):
             self.install(root, home, replace=True)
             (home / "contracts" / "resource-registry.schema.json").write_text("{}", encoding="utf-8")
             with self.assertRaises(RegistryDigestMismatchError): registry.validate(home=home)
+
+    def test_validate_refuses_malformed_digest_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); home = root / "continuity"; self.install(root, home)
+            (home / "registry" / "resources.sha256").write_bytes(b"not-a-digest\n")
+            with self.assertRaises(RegistryDigestMismatchError) as caught:
+                registry.validate(home=home)
+            self.assertEqual(str(caught.exception), "refused: malformed installed registry digest")
 
     def test_resolve_returns_only_requested_resource_and_unknown_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -35,7 +35,7 @@ See `protocols/mount-manifest.md` for authority, integrity, freshness, sealed-ob
 
 ## Live Resource Registry
 
-The live Resource Registry is private local continuity, never repository content. Configure an external home explicitly (for example in `.env`):
+The live Resource Registry is private local continuity, never repository content. Configure its external home in the process environment or as a persistent user environment variable:
 
 ```text
 GLITCH_CONTINUITY_HOME=C:\path\to\GlitchContinuity
