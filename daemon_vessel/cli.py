@@ -9,6 +9,7 @@ from textwrap import dedent
 
 from daemon_vessel.archive_reader import list_recent_captures, list_recent_episodes
 from daemon_vessel.mount import MountValidationError, build_mount_manifest, write_mount_manifest
+from daemon_vessel.registry import RegistryError, install as install_registry, resolve as resolve_registry, validate as validate_registry
 from daemon_vessel.state_builder import STATE_PATH, write_current_shrine_state
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
@@ -441,6 +442,26 @@ def cmd_mount(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_registry_install(args: argparse.Namespace) -> int:
+    paths = install_registry(
+        source=pathlib.Path(args.source), schema_source=pathlib.Path(args.schema),
+        expected_sha256=args.expect_sha256, home=args.home, replace=args.replace,
+    )
+    print(f"Installed validated registry at: {paths.home}")
+    return 0
+
+
+def cmd_registry_validate(args: argparse.Namespace) -> int:
+    paths, _ = validate_registry(home=args.home)
+    print(f"Validated registry at: {paths.home}")
+    return 0
+
+
+def cmd_registry_resolve(args: argparse.Namespace) -> int:
+    print(json.dumps(resolve_registry(args.resource_id, home=args.home), indent=2, sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="daemon",
@@ -502,6 +523,23 @@ def build_parser() -> argparse.ArgumentParser:
     mount_parser.add_argument("--out", help="Output path. Defaults to state/mount-manifest.json.")
     mount_parser.set_defaults(func=cmd_mount)
 
+    registry_parser = subparsers.add_parser("registry", help="Install, validate, or resolve an external Resource Registry.")
+    registry_subparsers = registry_parser.add_subparsers(dest="registry_command", required=True)
+    registry_install = registry_subparsers.add_parser("install", help="Validate and install an external registry.")
+    registry_install.add_argument("--source", required=True, help="Source resources.json outside this repository.")
+    registry_install.add_argument("--schema", required=True, help="Source Resource Registry schema outside this repository.")
+    registry_install.add_argument("--expect-sha256", required=True, help="Exact expected SHA-256 of --source.")
+    registry_install.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    registry_install.add_argument("--replace", action="store_true", help="Back up an existing installation before replacement.")
+    registry_install.set_defaults(func=cmd_registry_install)
+    registry_validate = registry_subparsers.add_parser("validate", help="Validate an installed external registry.")
+    registry_validate.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    registry_validate.set_defaults(func=cmd_registry_validate)
+    registry_resolve = registry_subparsers.add_parser("resolve", help="Resolve one resource after validation.")
+    registry_resolve.add_argument("resource_id", help="Stable resource ID.")
+    registry_resolve.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    registry_resolve.set_defaults(func=cmd_registry_resolve)
+
     return parser
 
 
@@ -510,7 +548,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except MountValidationError as exc:
+    except (MountValidationError, RegistryError) as exc:
         parser.error(str(exc))
 
 
