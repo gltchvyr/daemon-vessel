@@ -33,6 +33,24 @@ daemon mount \
 
 See `protocols/mount-manifest.md` for authority, integrity, freshness, sealed-object, and return-path rules.
 
+## Live Resource Registry
+
+The live Resource Registry is private local continuity, never repository content. Configure an external home explicitly (for example in `.env`):
+
+```text
+GLITCH_CONTINUITY_HOME=C:\path\to\GlitchContinuity
+```
+
+Install only a verified registry and its published schema, then validate or resolve a single stable resource ID:
+
+```bash
+daemon registry install --source path/to/resources.json --schema path/to/resource-registry.schema.json --expect-sha256 <sha256>
+daemon registry validate
+daemon registry resolve 'resource:example'
+```
+
+`--home <path>` deliberately overrides the environment for test or alternate installations. There is no repository-relative or current-directory fallback. Installation refuses an existing target unless `--replace` is supplied; replacement preserves timestamped local backups. Validation and resolution never fetch locators or repair, rewrite, or publish continuity.
+
 ## Signal Shrine projection
 
 `daemon shrine-state` can render a privacy-bounded visual projection from canonical state. It applies only when exact revision and payload expectations match; otherwise it writes an explicit refusal object. See `protocols/shrine-projection.md`.

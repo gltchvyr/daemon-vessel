@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A tiny local vessel for portable daemon continuity."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["jsonschema>=4.23,<5"]
 
 [project.optional-dependencies]
 ears = [
