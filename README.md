@@ -51,6 +51,18 @@ daemon registry resolve 'resource:example'
 
 `--home <path>` deliberately overrides the environment for test or alternate installations. There is no repository-relative or current-directory fallback. Installation refuses an existing target unless `--replace` is supplied; replacement preserves timestamped local backups. Validation and resolution never fetch locators or repair, rewrite, or publish continuity.
 
+## Live Access Index
+
+The Access Index is separate private local retrieval infrastructure. It is never committed with the repository or used to mutate canonical continuity. It requires a previously validated live Resource Registry in the same external continuity home.
+
+```bash
+daemon index install --source path/to/access-index.json --schema path/to/access-index.schema.json --expect-sha256 <sha256>
+daemon index validate
+daemon index resolve entry-id
+```
+
+Installation validates source snapshots and the installed Resource Registry before writing. It checks schema references offline, entry and resource identities, typed links, and bounded fallback cycles. The installation receipt contains only structural metadata and digests; it does not reproduce private retrieval content or locators.
+
 ## Signal Shrine projection
 
 `daemon shrine-state` can render a privacy-bounded visual projection from canonical state. It applies only when exact revision and payload expectations match; otherwise it writes an explicit refusal object. See `protocols/shrine-projection.md`.

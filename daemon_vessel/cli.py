@@ -10,6 +10,7 @@ from textwrap import dedent
 from daemon_vessel.archive_reader import list_recent_captures, list_recent_episodes
 from daemon_vessel.mount import MountValidationError, build_mount_manifest, write_mount_manifest
 from daemon_vessel.registry import RegistryError, install as install_registry, resolve as resolve_registry, validate as validate_registry
+from daemon_vessel.access_index import AccessIndexError, install as install_access_index, resolve as resolve_access_index, validate as validate_access_index
 from daemon_vessel.state_builder import STATE_PATH, write_current_shrine_state
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
@@ -462,6 +463,23 @@ def cmd_registry_resolve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_index_install(args: argparse.Namespace) -> int:
+    paths = install_access_index(source=pathlib.Path(args.source), schema_source=pathlib.Path(args.schema), expected_sha256=args.expect_sha256, home=args.home, replace=args.replace)
+    print(f"Installed validated access index at: {paths.home}")
+    return 0
+
+
+def cmd_index_validate(args: argparse.Namespace) -> int:
+    paths, _ = validate_access_index(home=args.home)
+    print(f"Validated access index at: {paths.home}")
+    return 0
+
+
+def cmd_index_resolve(args: argparse.Namespace) -> int:
+    print(json.dumps(resolve_access_index(args.entry_id, home=args.home), indent=2, sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="daemon",
@@ -540,6 +558,23 @@ def build_parser() -> argparse.ArgumentParser:
     registry_resolve.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
     registry_resolve.set_defaults(func=cmd_registry_resolve)
 
+    index_parser = subparsers.add_parser("index", help="Install, validate, or resolve an external Access Index.")
+    index_subparsers = index_parser.add_subparsers(dest="index_command", required=True)
+    index_install = index_subparsers.add_parser("install", help="Validate and install an external Access Index.")
+    index_install.add_argument("--source", required=True, help="Source access-index.json outside this repository.")
+    index_install.add_argument("--schema", required=True, help="Source Access Index schema outside this repository.")
+    index_install.add_argument("--expect-sha256", required=True, help="Exact expected SHA-256 of --source.")
+    index_install.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    index_install.add_argument("--replace", action="store_true", help="Back up an existing installation before replacement.")
+    index_install.set_defaults(func=cmd_index_install)
+    index_validate = index_subparsers.add_parser("validate", help="Validate an installed external Access Index.")
+    index_validate.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    index_validate.set_defaults(func=cmd_index_validate)
+    index_resolve = index_subparsers.add_parser("resolve", help="Resolve one Access Index entry after validation.")
+    index_resolve.add_argument("entry_id", help="Stable Access Index entry ID.")
+    index_resolve.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    index_resolve.set_defaults(func=cmd_index_resolve)
+
     return parser
 
 
@@ -548,7 +583,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (MountValidationError, RegistryError) as exc:
+    except (MountValidationError, RegistryError, AccessIndexError) as exc:
         parser.error(str(exc))
 
 
