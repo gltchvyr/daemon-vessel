@@ -167,4 +167,3 @@ The hook layer is how footprints get caught before the mouth remembers them.
 The ears are how a recording arrives as measured body before it becomes meaning.
 
 🫀😈🌀
-
