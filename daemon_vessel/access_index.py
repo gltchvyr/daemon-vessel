@@ -77,6 +77,10 @@ class AccessIndexPaths:
     def receipt(self) -> pathlib.Path:
         return self.home / "index" / "install-receipt.json"
 
+    @property
+    def receipt_digest(self) -> pathlib.Path:
+        return self.home / "index" / "install-receipt.sha256"
+
 
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
@@ -181,12 +185,35 @@ def _atomic_write(path: pathlib.Path, content: bytes) -> None:
 
 
 def _backup(paths: AccessIndexPaths) -> None:
-    existing = [path for path in (paths.schema, paths.index, paths.digest, paths.receipt) if path.exists()]
+    existing = [path for path in (paths.schema, paths.index, paths.digest, paths.receipt, paths.receipt_digest) if path.exists()]
     if not existing: return
     backup = paths.home / f"access-index-backup-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     if backup.exists(): raise AccessIndexError("refused: backup destination already exists")
     for source in existing:
         destination = backup / source.relative_to(paths.home); destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(source, destination)
+
+
+def _replace_complete_installation(paths: AccessIndexPaths, contents: dict[pathlib.Path, bytes]) -> None:
+    """Replace all live files or restore the exact former installation."""
+    previous: dict[pathlib.Path, bytes | None] = {}
+    for path in contents:
+        previous[path] = path.read_bytes() if path.exists() else None
+    try:
+        for path, content in contents.items():
+            _atomic_write(path, content)
+    except OSError as exc:
+        rollback_error = None
+        for path, old in previous.items():
+            try:
+                if old is None:
+                    if path.exists(): path.unlink()
+                else:
+                    _atomic_write(path, old)
+            except OSError as restore_exc:
+                rollback_error = restore_exc
+        if rollback_error:
+            raise AccessIndexError("refused: access index write failed and rollback failed") from rollback_error
+        raise AccessIndexError("refused: unable to write access index installation") from exc
 
 
 def install(*, source: pathlib.Path, schema_source: pathlib.Path, expected_sha256: str, home: str | pathlib.Path | None = None, replace: bool = False) -> AccessIndexPaths:
@@ -208,22 +235,27 @@ def install(*, source: pathlib.Path, schema_source: pathlib.Path, expected_sha25
     if existing: _backup(paths)
     schema_digest = _sha256(schema_bytes)
     receipt = {"schema_id": schema.get("$id") if isinstance(schema, dict) else None, "index_sha256": actual, "schema_sha256": schema_digest, "installed_at": dt.datetime.now(dt.timezone.utc).isoformat(), "entry_count": len(index["entries"]), "source_filenames": {"index": source.name, "schema": schema_source.name}}
-    try:
-        _atomic_write(paths.schema, schema_bytes); _atomic_write(paths.index, source_bytes); _atomic_write(paths.digest, f"{actual}\n".encode("ascii")); _atomic_write(paths.receipt, (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode("utf-8"))
-    except OSError as exc:
-        raise AccessIndexError("refused: unable to write access index installation") from exc
+    receipt_bytes = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    _replace_complete_installation(paths, {
+        paths.schema: schema_bytes, paths.index: source_bytes, paths.digest: f"{actual}\n".encode("ascii"),
+        paths.receipt: receipt_bytes, paths.receipt_digest: f"{_sha256(receipt_bytes)}\n".encode("ascii"),
+    })
     return paths
 
 
 def validate(*, home: str | pathlib.Path | None = None) -> tuple[AccessIndexPaths, dict]:
     paths = resolve_home(home)
-    index_bytes = _read_bytes(paths.index, "installed access index"); schema_bytes = _read_bytes(paths.schema, "installed schema"); receipt_bytes = _read_bytes(paths.receipt, "installation receipt"); digest_bytes = _read_bytes(paths.digest, "installed access index digest")
+    index_bytes = _read_bytes(paths.index, "installed access index"); schema_bytes = _read_bytes(paths.schema, "installed schema"); receipt_bytes = _read_bytes(paths.receipt, "installation receipt"); digest_bytes = _read_bytes(paths.digest, "installed access index digest"); receipt_digest_bytes = _read_bytes(paths.receipt_digest, "installed receipt digest")
     index = _decode_json(index_bytes, "installed access index"); schema = _decode_json(schema_bytes, "installed schema"); receipt = _decode_json(receipt_bytes, "installation receipt")
     try: digest = digest_bytes.decode("ascii")
     except UnicodeError as exc: raise AccessIndexDigestMismatchError("refused: malformed installed access index digest") from exc
     if not re.fullmatch(r"[0-9a-f]{64}\n", digest): raise AccessIndexDigestMismatchError("refused: malformed installed access index digest")
+    try: receipt_digest = receipt_digest_bytes.decode("ascii")
+    except UnicodeError as exc: raise AccessIndexDigestMismatchError("refused: malformed installed receipt digest") from exc
+    if not re.fullmatch(r"[0-9a-f]{64}\n", receipt_digest): raise AccessIndexDigestMismatchError("refused: malformed installed receipt digest")
     actual = _sha256(index_bytes); schema_digest = _sha256(schema_bytes)
     if not isinstance(receipt, dict) or digest[:-1] != actual or receipt.get("index_sha256") != actual: raise AccessIndexDigestMismatchError("refused: installed access index digest mismatch")
+    if receipt_digest[:-1] != _sha256(receipt_bytes): raise AccessIndexDigestMismatchError("refused: installed receipt digest mismatch")
     if receipt.get("schema_sha256") != schema_digest or not isinstance(schema, dict) or receipt.get("schema_id") != schema.get("$id"): raise AccessIndexDigestMismatchError("refused: installed schema digest mismatch")
     _validate_schema(index, schema)
     try: _, installed_registry = registry.validate(home=paths.home)
@@ -237,4 +269,3 @@ def resolve(entry_id: str, *, home: str | pathlib.Path | None = None) -> dict:
     for entry in index["entries"]:
         if entry["id"] == entry_id: return entry
     raise UnknownEntryIdError("refused: unknown entry ID")
-

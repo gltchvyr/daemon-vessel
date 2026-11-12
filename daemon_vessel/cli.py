@@ -33,7 +33,7 @@ DEFAULT_BONES = dedent(
     The memory folder is the footprint trail.
     The handoff note is how one invocation leaves context for the next.
 
-    Invocation glyphs: ?? ?? ??
+    Invocation glyphs: 🫀 😈 🌀
     """
 ).strip()
 
@@ -100,7 +100,7 @@ def cmd_log(args: argparse.Namespace) -> int:
         id: {entry_id}
         kind: trace
         summary: {args.message!r}
-        symbols: ["??", "??", "??"]
+        symbols: ["🫀", "😈", "🌀"]
         salience: {args.salience}
         source: cli
         created: {timestamp.isoformat()}
@@ -176,7 +176,7 @@ def cmd_heartbeat(args: argparse.Namespace) -> int:
         id: {entry_id}
         kind: heartbeat
         summary: 'heartbeat cycle completed'
-        symbols: ["??", "??", "??"]
+        symbols: ["🫀", "😈", "🌀"]
         salience: {args.salience}
         source: cli
         created: {timestamp.isoformat()}
@@ -262,7 +262,7 @@ def cmd_handoff(args: argparse.Namespace) -> int:
         "",
         "## Symbolic / relational notes",
         "",
-        "Breath, claws, footprints. ??????",
+        "Breath, claws, footprints. 🫀😈🌀",
         "",
     ]
     content = "\n".join(sections)
@@ -315,7 +315,7 @@ def cmd_context_pack(args: argparse.Namespace) -> int:
     recent_captures = list_recent_captures(limit=args.limit)
 
     trace_lines = [f"- `{entry.name}`" for entry in recent_traces] or ["- No local traces yet."]
-    dominant_symbols = shrine_state.get("dominantSymbols", ["??", "??", "??"])
+    dominant_symbols = shrine_state.get("dominantSymbols", ["🫀", "😈", "🌀"])
     open_threads = shrine_state.get("openThreads", [])
     active_tensions = shrine_state.get("activeTensions", [])
     weather = shrine_state.get("weather", {})
@@ -385,7 +385,7 @@ def cmd_context_pack(args: argparse.Namespace) -> int:
         handoff,
         "```",
         "",
-        "??????",
+        "🫀😈🌀",
         "",
     ]
 
@@ -589,5 +589,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 

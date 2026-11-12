@@ -67,20 +67,72 @@ class AccessIndexTests(unittest.TestCase):
     def test_replace_backup_and_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home, source, schema, digest = self.setup_home(Path(tmp)); access_index.install(source=source, schema_source=schema, expected_sha256=digest, home=home)
-            paths = access_index.resolve_home(home); old = paths.index.read_bytes()
+            paths = access_index.resolve_home(home); old = {path.relative_to(home): path.read_bytes() for path in (paths.schema, paths.index, paths.digest, paths.receipt, paths.receipt_digest)}
             with self.assertRaises(access_index.AccessIndexError): access_index.install(source=source, schema_source=schema, expected_sha256=digest, home=home)
             access_index.install(source=source, schema_source=schema, expected_sha256=digest, home=home, replace=True)
-            self.assertEqual(next(home.glob("access-index-backup-*")) / "index" / "access-index.json", next(home.glob("access-index-backup-*")) / "index" / "access-index.json")
-            self.assertEqual(next(home.glob("access-index-backup-*")) .joinpath("index/access-index.json").read_bytes(), old)
+            backup = next(home.glob("access-index-backup-*"))
+            for relative, content in old.items(): self.assertEqual((backup / relative).read_bytes(), content)
             paths.index.write_text("{}", encoding="utf-8")
             with self.assertRaises(access_index.AccessIndexDigestMismatchError): access_index.validate(home=home)
+
+    def test_input_and_installed_artifact_refusals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); home, source, schema, digest = self.setup_home(root)
+            for missing_source, missing_schema in ((root / "missing.json", schema), (source, root / "missing-schema.json")):
+                with self.assertRaises(access_index.AccessIndexError): access_index.install(source=missing_source, schema_source=missing_schema, expected_sha256=digest, home=home)
+            source.write_bytes(b"\xff")
+            with self.assertRaises(access_index.AccessIndexSchemaError): access_index.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=home)
+            source.write_text(json.dumps(index_payload()), encoding="utf-8"); schema.write_bytes(b"{")
+            with self.assertRaises(access_index.AccessIndexSchemaError): access_index.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=home)
+            schema.write_text(json.dumps(INDEX_SCHEMA), encoding="utf-8"); access_index.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=home)
+            paths = access_index.resolve_home(home)
+            for path in (paths.schema, paths.digest, paths.receipt, paths.receipt_digest):
+                original = path.read_bytes(); path.write_bytes(b"bad")
+                with self.assertRaises(access_index.AccessIndexError): access_index.validate(home=home)
+                path.write_bytes(original)
+
+    def test_invalid_datetime_links_cycles_registry_and_resolve_refusals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home, source, schema, _ = self.setup_home(Path(tmp))
+            invalid_time = index_payload(); invalid_time["generated_at"] = "not-a-date"; source.write_text(json.dumps(invalid_time), encoding="utf-8")
+            with self.assertRaises(access_index.AccessIndexSchemaError): access_index.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=home)
+            bad_link = index_payload(); bad_link["entries"][0]["links"] = {"relates_to": ["missing"]}; source.write_text(json.dumps(bad_link), encoding="utf-8")
+            with self.assertRaises(access_index.AccessIndexSchemaError): access_index.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=home)
+            direct = index_payload(); direct["entries"][0]["follow_if_thin"] = [{"entry_id": "entry-0"}]; source.write_text(json.dumps(direct), encoding="utf-8")
+            with self.assertRaises(access_index.AccessIndexSchemaError): access_index.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=home)
+            source.write_text(json.dumps(index_payload()), encoding="utf-8"); access_index.install(source=source, schema_source=schema, expected_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), home=home)
+            with self.assertRaises(access_index.UnknownEntryIdError): access_index.resolve("missing", home=home)
+            (home / "registry" / "resources.json").write_text("{}", encoding="utf-8")
+            with self.assertRaises(access_index.AccessIndexError): access_index.validate(home=home)
+
+    def test_cli_never_leaks_sentinel_and_failure_rolls_back(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); home, source, schema, digest = self.setup_home(root); sentinel = "PRIVATE-SENTINEL"
+            bad = index_payload(); bad["entries"][0]["title"] = sentinel; restrictive = json.loads(json.dumps(INDEX_SCHEMA)); restrictive["properties"]["entries"]["items"]["properties"]["title"] = {"const": "allowed"}
+            source.write_text(json.dumps(bad), encoding="utf-8"); schema.write_text(json.dumps(restrictive), encoding="utf-8"); errors = io.StringIO()
+            with redirect_stderr(errors), self.assertRaises(SystemExit): cli.main(["index", "install", "--source", str(source), "--schema", str(schema), "--expect-sha256", hashlib.sha256(source.read_bytes()).hexdigest(), "--home", str(home)])
+            self.assertNotIn(sentinel, errors.getvalue())
+            schema.write_text(json.dumps(INDEX_SCHEMA), encoding="utf-8"); source.write_text(json.dumps(index_payload()), encoding="utf-8"); digest = hashlib.sha256(source.read_bytes()).hexdigest(); paths = access_index.resolve_home(home)
+            original_write = access_index._atomic_write; calls = [0]
+            def fail_once(path, content):
+                calls[0] += 1
+                if calls[0] == 2: raise OSError("injected")
+                return original_write(path, content)
+            with patch.object(access_index, "_atomic_write", side_effect=fail_once):
+                with self.assertRaises(access_index.AccessIndexError): access_index.install(source=source, schema_source=schema, expected_sha256=digest, home=home)
+            self.assertFalse(paths.index.exists())
+            access_index.install(source=source, schema_source=schema, expected_sha256=digest, home=home)
+            before = {path: path.read_bytes() for path in (paths.schema, paths.index, paths.digest, paths.receipt, paths.receipt_digest)}; calls[0] = 0
+            with patch.object(access_index, "_atomic_write", side_effect=fail_once):
+                with self.assertRaises(access_index.AccessIndexError): access_index.install(source=source, schema_source=schema, expected_sha256=digest, home=home, replace=True)
+            self.assertEqual({path: path.read_bytes() for path in before}, before)
 
     def test_cli_and_worktree_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home, source, schema, digest = self.setup_home(Path(tmp)); self.assertEqual(cli.main(["index", "install", "--source", str(source), "--schema", str(schema), "--expect-sha256", digest, "--home", str(home)]), 0); self.assertEqual(cli.main(["index", "validate", "--home", str(home)]), 0); self.assertEqual(cli.main(["index", "resolve", "entry-0", "--home", str(home)]), 0)
             (Path(tmp) / ".git").mkdir()
             with self.assertRaises(access_index.AccessIndexError): access_index.resolve_home(Path(tmp) / ".git" / "bad")
+            with self.assertRaises(access_index.AccessIndexError): access_index.resolve_home(Path(tmp) / "repository", repository_root=Path(tmp) / "repository")
 
 
 if __name__ == "__main__": unittest.main()
-
