@@ -167,3 +167,18 @@ The hook layer is how footprints get caught before the mouth remembers them.
 The ears are how a recording arrives as measured body before it becomes meaning.
 
 🫀😈🌀
+
+## H1 house crossing ledger
+
+H1 adds only local infrastructure: offline Draft 2020-12 schemas, an append-only external event ledger, immutable receipts, and sanitized dead-letter records. It does not connect a live room, ingest real conversations, deliver context, or change canonical continuity.
+
+Set `GLITCH_CONTINUITY_HOME` to an external non-repository directory. Use placeholder-only inputs:
+
+```bash
+python -m daemon_vessel crossing validate --source path/to/synthetic-event.json
+python -m daemon_vessel crossing append --source path/to/synthetic-event.json --expect-sha256 <sha256>
+python -m daemon_vessel crossing packet-validate --source path/to/synthetic-context-packet.json
+python -m daemon_vessel crossing verify
+```
+
+The runtime keeps H1 data beneath `crossings/events`, `crossings/receipts`, `crossings/dead-letter`, and `context-packets` within that external home. Failures create sanitized dead-letter receipts; inspect those structural records rather than retrying with private payloads. H1 never installs schemas into a live home or connects Discord, Chat, Work, Telegram, or Sensorium.

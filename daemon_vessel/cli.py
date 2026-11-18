@@ -12,6 +12,7 @@ from daemon_vessel.mount import MountValidationError, build_mount_manifest, writ
 from daemon_vessel.registry import RegistryError, install as install_registry, resolve as resolve_registry, validate as validate_registry
 from daemon_vessel.access_index import AccessIndexError, install as install_access_index, resolve as resolve_access_index, validate as validate_access_index
 from daemon_vessel.state_builder import STATE_PATH, write_current_shrine_state
+from daemon_vessel.crossing import CrossingError, ingest as ingest_crossing, validate_event, validate_packet, verify as verify_crossing
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
 ROOT = MODULE_DIR.parent
@@ -480,6 +481,31 @@ def cmd_index_resolve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_crossing_validate(args: argparse.Namespace) -> int:
+    value = json.loads(pathlib.Path(args.source).read_text(encoding="utf-8"))
+    validate_event(value)
+    print("validated crossing event")
+    return 0
+
+def cmd_crossing_append(args: argparse.Namespace) -> int:
+    source = pathlib.Path(args.source)
+    raw = source.read_bytes()
+    if args.expect_sha256 and __import__("hashlib").sha256(raw).hexdigest() != args.expect_sha256:
+        raise CrossingError("refused: source digest does not match --expect-sha256")
+    receipt = ingest_crossing(json.loads(raw.decode("utf-8")), home=args.home)
+    print(json.dumps({"receipt_id": receipt["receipt_id"], "outcome": receipt["outcome"]}, sort_keys=True))
+    return 0
+
+def cmd_crossing_packet(args: argparse.Namespace) -> int:
+    validate_packet(json.loads(pathlib.Path(args.source).read_text(encoding="utf-8")))
+    print("validated context packet")
+    return 0
+
+def cmd_crossing_verify(args: argparse.Namespace) -> int:
+    print(json.dumps(verify_crossing(home=args.home), sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="daemon",
@@ -575,6 +601,23 @@ def build_parser() -> argparse.ArgumentParser:
     index_resolve.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
     index_resolve.set_defaults(func=cmd_index_resolve)
 
+    crossing_parser = subparsers.add_parser("crossing", help="Validate or record local-only H1 crossing artifacts.")
+    crossing_subparsers = crossing_parser.add_subparsers(dest="crossing_command", required=True)
+    crossing_validate = crossing_subparsers.add_parser("validate", help="Validate one event without mutation.")
+    crossing_validate.add_argument("--source", required=True)
+    crossing_validate.set_defaults(func=cmd_crossing_validate)
+    crossing_append = crossing_subparsers.add_parser("append", help="Append one validated event to the external ledger.")
+    crossing_append.add_argument("--source", required=True)
+    crossing_append.add_argument("--expect-sha256")
+    crossing_append.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    crossing_append.set_defaults(func=cmd_crossing_append)
+    crossing_packet = crossing_subparsers.add_parser("packet-validate", help="Validate a context packet without delivery.")
+    crossing_packet.add_argument("--source", required=True)
+    crossing_packet.set_defaults(func=cmd_crossing_packet)
+    crossing_verify = crossing_subparsers.add_parser("verify", help="Verify installed H1 ledgers and receipts.")
+    crossing_verify.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
+    crossing_verify.set_defaults(func=cmd_crossing_verify)
+
     return parser
 
 
@@ -583,7 +626,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (MountValidationError, RegistryError, AccessIndexError) as exc:
+    except (MountValidationError, RegistryError, AccessIndexError, CrossingError) as exc:
         parser.error(str(exc))
 
 
