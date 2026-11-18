@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gltch.context-packet/0.1.0",
+  "type": "object",
+  "required": [
+    "schema",
+    "packet_id",
+    "orientation",
+    "purpose",
+    "created_at",
+    "sha256",
+    "access_index_nodes",
+    "registry_resources",
+    "sources",
+    "corrections",
+    "open_commitments",
+    "unresolved",
+    "runtime_seam",
+    "budgets",
+    "omissions",
+    "compaction_ledger",
+    "mutation_authorized",
+    "construction_receipt_id"
+  ],
+  "properties": {
+    "schema": {"const": "gltch.context-packet/0.1.0"},
+    "packet_id": {"type": "string", "pattern": "^packet:[A-Za-z0-9_.!:-]{1,248}$"},
+    "orientation": {"type": "string", "minLength": 1, "maxLength": 8192},
+    "purpose": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "created_at": {"type": "string", "format": "date-time"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "access_index_nodes": {"$ref": "#/$defs/idArray"},
+    "registry_resources": {"$ref": "#/$defs/idArray"},
+    "sources": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "actor_id",
+          "speaker_position",
+          "source_locator",
+          "authority_class",
+          "provenance",
+          "fidelity"
+        ],
+        "properties": {
+          "event_id": {"type": "string", "pattern": "^event:"},
+          "actor_id": {"type": "string", "pattern": "^actor:"},
+          "speaker_position": {"enum": ["user", "assistant", "tool", "system", "unknown"]},
+          "source_locator": {"type": "string", "minLength": 1, "maxLength": 2048},
+          "authority_class": {"type": "string", "minLength": 1},
+          "provenance": {"type": "string", "minLength": 1},
+          "fidelity": {
+            "enum": [
+              "exact_bytes_verified",
+              "exact_bytes_unverified",
+              "rendered_content",
+              "user_relayed",
+              "derived_summary",
+              "unavailable"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "corrections": {"$ref": "#/$defs/noteArray"},
+    "open_commitments": {"$ref": "#/$defs/noteArray"},
+    "unresolved": {"$ref": "#/$defs/noteArray"},
+    "runtime_seam": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["runtime_id", "evidence"],
+        "properties": {
+          "runtime_id": {"type": "string", "minLength": 1},
+          "evidence": {"enum": ["reported", "observed", "inferred", "unavailable"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "required": ["hops", "resources", "tokens"],
+      "properties": {
+        "hops": {"type": "integer", "minimum": 0},
+        "resources": {"type": "integer", "minimum": 0},
+        "tokens": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "omissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["kind", "reason"],
+        "properties": {
+          "kind": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "compaction_ledger": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["operation", "source_refs", "output_ref", "fidelity_loss"],
+        "properties": {
+          "operation": {"enum": ["omit", "summarize", "extract", "none"]},
+          "source_refs": {"$ref": "#/$defs/idArray"},
+          "output_ref": {"type": ["string", "null"]},
+          "fidelity_loss": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "mutation_authorized": {"type": "boolean", "default": false},
+    "construction_receipt_id": {"type": "string", "pattern": "^receipt:"}
+  },
+  "$defs": {
+    "idArray": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 512},
+      "uniqueItems": true
+    },
+    "noteArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["id", "detail"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "detail": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

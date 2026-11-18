@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gltch.house-event/0.1.0",
+  "type": "object",
+  "required": [
+    "schema",
+    "event_id",
+    "occurred_at",
+    "ingested_at",
+    "source",
+    "actor",
+    "content",
+    "privacy_class",
+    "authority_class",
+    "lineage",
+    "attachments",
+    "continuity",
+    "transport"
+  ],
+  "properties": {
+    "schema": {"const": "gltch.house-event/0.1.0"},
+    "event_id": {"type": "string", "pattern": "^event:[A-Za-z0-9_.!:-]{1,249}$"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "ingested_at": {"type": "string", "format": "date-time"},
+    "source": {
+      "type": "object",
+      "required": ["surface_id", "room_id", "thread_id", "native_event_id"],
+      "properties": {
+        "surface_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "room_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "thread_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+        "native_event_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 512}
+      },
+      "additionalProperties": false
+    },
+    "actor": {
+      "type": "object",
+      "required": ["actor_id", "speaker_position", "runtime_id", "runtime_evidence"],
+      "properties": {
+        "actor_id": {"type": "string", "pattern": "^actor:[A-Za-z0-9_.!:-]{1,249}$"},
+        "speaker_position": {"enum": ["user", "assistant", "tool", "system", "unknown"]},
+        "runtime_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "runtime_evidence": {"enum": ["reported", "observed", "inferred", "unavailable"]}
+      },
+      "additionalProperties": false
+    },
+    "content": {
+      "type": "object",
+      "required": ["media_type", "fidelity", "sha256", "inline", "ref", "language"],
+      "properties": {
+        "media_type": {"type": "string", "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"},
+        "fidelity": {
+          "enum": [
+            "exact_bytes_verified",
+            "exact_bytes_unverified",
+            "rendered_content",
+            "user_relayed",
+            "derived_summary",
+            "unavailable"
+          ]
+        },
+        "sha256": {
+          "anyOf": [
+            {"type": "null"},
+            {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          ]
+        },
+        "inline": {},
+        "ref": {"type": ["string", "null"], "minLength": 1, "maxLength": 2048},
+        "language": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9-]{1,35}$"}
+      },
+      "additionalProperties": false
+    },
+    "privacy_class": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "authority_class": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "lineage": {
+      "type": "object",
+      "required": ["reply_to", "corrects", "supersedes", "derived_from"],
+      "properties": {
+        "reply_to": {"$ref": "#/$defs/eventIdArray"},
+        "corrects": {"$ref": "#/$defs/eventIdArray"},
+        "supersedes": {"$ref": "#/$defs/eventIdArray"},
+        "derived_from": {"$ref": "#/$defs/eventIdArray"}
+      },
+      "additionalProperties": false
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "media_type", "sha256", "locator_state", "locator"],
+        "properties": {
+          "asset_id": {"type": "string", "minLength": 1, "maxLength": 512},
+          "media_type": {"type": "string", "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"},
+          "sha256": {
+            "anyOf": [
+              {"type": "null"},
+              {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            ]
+          },
+          "locator_state": {
+            "enum": ["stable_identifier", "local", "remote", "temporary", "missing", "unresolved"]
+          },
+          "locator": {"type": ["string", "null"], "minLength": 1, "maxLength": 4096}
+        },
+        "additionalProperties": false
+      }
+    },
+    "continuity": {
+      "type": "object",
+      "required": ["candidate_delta_ref", "mutation_authorized"],
+      "properties": {
+        "candidate_delta_ref": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+        "mutation_authorized": {"type": "boolean", "default": false}
+      },
+      "additionalProperties": false
+    },
+    "transport": {
+      "type": "object",
+      "required": ["mode", "receipt_id", "raw_bytes_available", "rendered_content_available"],
+      "properties": {
+        "mode": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+        "receipt_id": {
+          "anyOf": [
+            {"type": "null"},
+            {"type": "string", "pattern": "^receipt:[A-Za-z0-9_.!:-]{1,247}$"}
+          ]
+        },
+        "raw_bytes_available": {"type": "boolean"},
+        "rendered_content_available": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "eventIdArray": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^event:[A-Za-z0-9_.!:-]{1,249}$"},
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

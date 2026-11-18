@@ -23,3 +23,6 @@ daemon-ears = "daemon_vessel.ears:main"
 
 [tool.setuptools]
 packages = ["daemon_vessel"]
+
+[tool.setuptools.package-data]
+daemon_vessel = ["schemas/*.json"]
