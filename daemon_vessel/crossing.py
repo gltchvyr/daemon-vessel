@@ -16,7 +16,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from typing import Any, Iterable
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
@@ -127,6 +127,12 @@ def _safe_external_locator(value: str) -> bool:
     parsed = urlsplit(value)
     if parsed.username is not None or parsed.password is not None:
         return False
+    credential_keys = re.compile(
+        r"(?:^|[-_])(auth|authorization|credential|key|password|secret|signature|sig|token)(?:$|[-_])",
+        re.IGNORECASE,
+    )
+    if any(credential_keys.search(key) for key, _ in parse_qsl(parsed.query, keep_blank_values=True)):
+        return False
     if parsed.scheme:
         return parsed.scheme.lower() != "file"
     return _safe_relative(value)
@@ -155,6 +161,11 @@ def resolve_home(
             code="missing_continuity_home",
         )
     candidate = pathlib.Path(selected).expanduser().resolve(strict=False)
+    if candidate == pathlib.Path(candidate.anchor):
+        raise CrossingError(
+            "refused: continuity home cannot be a filesystem root",
+            code="unsafe_continuity_home",
+        )
     root = repository_root.resolve(strict=False)
     try:
         candidate.relative_to(root)
@@ -295,6 +306,11 @@ def validate_event(value: object) -> dict[str, Any]:
             "refused: content must use exactly one of inline or ref",
             code="ambiguous_content_state",
         )
+    if content.get("ref") is not None and not _safe_external_locator(content["ref"]):
+        raise CrossingError("refused: unsafe content reference", code="unsafe_locator")
+    candidate_delta = event["continuity"]["candidate_delta_ref"]
+    if candidate_delta is not None and not _safe_external_locator(candidate_delta):
+        raise CrossingError("refused: unsafe candidate-delta reference", code="unsafe_locator")
     for relation, entries in event["lineage"].items():
         if event["event_id"] in entries:
             raise CrossingError(
@@ -310,6 +326,8 @@ def validate_event(value: object) -> dict[str, Any]:
             raise CrossingError("refused: unresolved attachment cannot have a locator", code="unsafe_locator")
         if state == "local" and (not isinstance(locator, str) or not _safe_relative(locator)):
             raise CrossingError("refused: unsafe local attachment locator", code="unsafe_locator")
+        if state in {"stable_identifier", "remote", "temporary"} and locator is None:
+            raise CrossingError("refused: resolved attachment requires a locator", code="unsafe_locator")
         if state not in {"local", "missing", "unresolved"} and locator is not None:
             if not isinstance(locator, str) or not _safe_external_locator(locator):
                 raise CrossingError("refused: unsafe attachment locator", code="unsafe_locator")
@@ -334,10 +352,11 @@ def validate_receipt(value: object) -> dict[str, Any]:
     for locator in receipt["artifact_paths"]:
         if not _safe_relative(locator):
             raise CrossingError("refused: unsafe receipt artifact locator", code="unsafe_locator")
-    if receipt["outcome"] == "refused" and receipt["dead_letter"] is not True:
-        raise CrossingError("refused: refused receipt must be a dead letter", code="invalid_receipt")
-    if receipt["outcome"] != "refused" and receipt["dead_letter"] is True:
-        raise CrossingError("refused: non-refusal receipt cannot be a dead letter", code="invalid_receipt")
+    is_dead_outcome = receipt["outcome"] in {"refused", "failed"}
+    if is_dead_outcome and receipt["dead_letter"] is not True:
+        raise CrossingError("refused: refused or failed receipt must be a dead letter", code="invalid_receipt")
+    if not is_dead_outcome and receipt["dead_letter"] is True:
+        raise CrossingError("refused: successful or partial receipt cannot be a dead letter", code="invalid_receipt")
     if receipt["outcome"] == "duplicate" and receipt["idempotent_duplicate"] is not True:
         raise CrossingError("refused: duplicate receipt must be idempotent", code="invalid_receipt")
     if receipt["outcome"] != "duplicate" and receipt["idempotent_duplicate"] is True:
@@ -349,10 +368,13 @@ def validate_receipt(value: object) -> dict[str, Any]:
             "refused: duplicate receipt requires event and original receipt links",
             code="invalid_receipt",
         )
-    if receipt["outcome"] == "refused" and receipt["failure"] is None:
-        raise CrossingError("refused: dead letter requires a failure code", code="invalid_receipt")
-    if receipt["outcome"] != "refused" and receipt["failure"] is not None:
-        raise CrossingError("refused: non-refusal receipt cannot carry failure", code="invalid_receipt")
+    if receipt["outcome"] == "success" and receipt["event_id"] is None:
+        raise CrossingError("refused: success receipt requires an event link", code="invalid_receipt")
+    has_failure_outcome = receipt["outcome"] in {"refused", "failed", "partial"}
+    if has_failure_outcome and receipt["failure"] is None:
+        raise CrossingError("refused: unsuccessful receipt requires a failure code", code="invalid_receipt")
+    if not has_failure_outcome and receipt["failure"] is not None:
+        raise CrossingError("refused: successful receipt cannot carry failure", code="invalid_receipt")
     if receipt["operation"] == "replay" and receipt["replay_of"] is None:
         raise CrossingError("refused: replay receipt requires an original link", code="invalid_receipt")
     return receipt
@@ -598,7 +620,11 @@ def _receipt_files(paths: CrossingPaths, *, dead: bool = False) -> Iterable[path
 
 
 def _read_receipt(path: pathlib.Path) -> dict[str, Any]:
-    return validate_receipt(decode_json(_read_bytes(path, "crossing receipt"), "crossing receipt"))
+    receipt = validate_receipt(decode_json(_read_bytes(path, "crossing receipt"), "crossing receipt"))
+    expected_name = receipt["receipt_id"].replace(":", "-") + ".json"
+    if path.name != expected_name:
+        raise CrossingError("refused: receipt filename and identity disagree", code="receipt_integrity")
+    return receipt
 
 
 def _find_success_receipt(paths: CrossingPaths, event_id: str) -> str | None:
@@ -791,9 +817,11 @@ def _commit_event(
 def ingest(value: object, *, home: str | pathlib.Path | None = None) -> dict[str, Any]:
     when = _now()
     paths = resolve_home(home)
+    _relative(paths, paths.lock)
+    _relative(paths, paths.transactions)
     with _LedgerLock(paths.lock):
-        _recover_transactions(paths)
         try:
+            _recover_transactions(paths)
             event = validate_event(value)
             _, by_id, by_source = _scan_events(paths)
             canonical = _canonical_bytes(event, newline=False)
@@ -834,8 +862,9 @@ def ingest(value: object, *, home: str | pathlib.Path | None = None) -> dict[str
         except CrossingError as error:
             try:
                 _write_dead_letter(paths, when, value, error)
-            except CrossingError:
-                pass
+            except CrossingError as dead_error:
+                if dead_error.code != "unsafe_locator":
+                    raise dead_error from error
             raise
         except (OSError, UnicodeError, ValueError, TypeError) as exc:
             error = CrossingError("refused: crossing operation failed", code="crossing_operation_failed")
@@ -845,11 +874,21 @@ def ingest(value: object, *, home: str | pathlib.Path | None = None) -> dict[str
 
 def verify(*, home: str | pathlib.Path | None = None) -> dict[str, Any]:
     paths = resolve_home(home)
+    _relative(paths, paths.lock)
+    _relative(paths, paths.transactions)
     with _LedgerLock(paths.lock):
-        recovered = _recover_transactions(paths)
-        events, by_id, _ = _scan_events(paths)
-        receipts = [_read_receipt(path) for path in _receipt_files(paths)]
-        dead_letters = [_read_receipt(path) for path in _receipt_files(paths, dead=True)]
+        try:
+            recovered = _recover_transactions(paths)
+            events, by_id, _ = _scan_events(paths)
+            receipts = [_read_receipt(path) for path in _receipt_files(paths)]
+            dead_letters = [_read_receipt(path) for path in _receipt_files(paths, dead=True)]
+        except CrossingError:
+            raise
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            raise CrossingError(
+                "refused: crossing verification failed",
+                code="crossing_operation_failed",
+            ) from exc
         receipt_by_id: dict[str, dict[str, Any]] = {}
         for receipt in (*receipts, *dead_letters):
             if receipt["receipt_id"] in receipt_by_id:
@@ -861,7 +900,11 @@ def verify(*, home: str | pathlib.Path | None = None) -> dict[str, Any]:
             for locator in receipt["artifact_paths"]:
                 if not _within(paths.home, locator).exists():
                     raise CrossingError("refused: receipt references a missing artifact", code="receipt_integrity")
-            if receipt["outcome"] == "success" and receipt["event_id"] is not None:
+            if (
+                receipt["operation"] == "ingest"
+                and receipt["outcome"] == "success"
+                and receipt["event_id"] is not None
+            ):
                 successes.setdefault(receipt["event_id"], []).append(receipt)
             for relation in ("original_receipt_id", "retry_of", "replay_of"):
                 target = receipt[relation]
@@ -878,8 +921,18 @@ def verify(*, home: str | pathlib.Path | None = None) -> dict[str, Any]:
                         "refused: duplicate receipt does not match its original",
                         code="receipt_integrity",
                     )
+            if receipt["operation"] == "replay":
+                original = receipt_by_id[receipt["replay_of"]]
+                if (
+                    receipt["event_id"] not in by_id
+                    or original["event_id"] != receipt["event_id"]
+                ):
+                    raise CrossingError(
+                        "refused: replay receipt does not match its original event",
+                        code="receipt_integrity",
+                    )
         for dead in dead_letters:
-            if dead["outcome"] != "refused" or dead["dead_letter"] is not True:
+            if dead["outcome"] not in {"refused", "failed"} or dead["dead_letter"] is not True:
                 raise CrossingError("refused: invalid dead-letter receipt", code="receipt_integrity")
             for locator in dead["artifact_paths"]:
                 if not _within(paths.home, locator).exists():

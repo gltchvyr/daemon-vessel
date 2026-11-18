@@ -210,6 +210,31 @@ class CrossingTests(unittest.TestCase):
         }]
         with self.assertRaises(crossing.CrossingError):
             crossing.validate_event(invalid)
+        invalid = self.event()
+        invalid["attachments"] = [{
+            "asset_id": "asset:test",
+            "media_type": "image/png",
+            "sha256": None,
+            "locator_state": "remote",
+            "locator": "https://example.invalid/asset?X-Amz-Signature=synthetic",
+        }]
+        with self.assertRaises(crossing.CrossingError):
+            crossing.validate_event(invalid)
+        invalid = self.event()
+        invalid["attachments"] = [{
+            "asset_id": "asset:test",
+            "media_type": "image/png",
+            "sha256": None,
+            "locator_state": "remote",
+            "locator": None,
+        }]
+        with self.assertRaisesRegex(crossing.CrossingError, "requires a locator"):
+            crossing.validate_event(invalid)
+        invalid = self.event()
+        invalid["content"]["inline"] = None
+        invalid["content"]["ref"] = "file:///synthetic/private"
+        with self.assertRaisesRegex(crossing.CrossingError, "unsafe content"):
+            crossing.validate_event(invalid)
 
     def test_read_snapshot_once_and_digest_text(self):
         with mock.patch.object(pathlib.Path, "read_bytes", return_value=b"{}") as read:
@@ -303,6 +328,23 @@ class CrossingTests(unittest.TestCase):
         self.assertEqual((result["events"], result["receipts"]), (0, 0))
         self.assertEqual(result["transactions_recovered"]["rolled_back"], 1)
 
+    def test_crash_after_both_publications_is_recovered_as_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = crossing._cleanup_transaction
+            calls = 0
+            def crash_cleanup(journal, members):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise KeyboardInterrupt()
+                return original(journal, members)
+            with mock.patch.object(crossing, "_cleanup_transaction", side_effect=crash_cleanup):
+                with self.assertRaises(KeyboardInterrupt):
+                    crossing.ingest(self.event(), home=directory)
+            result = crossing.verify(home=directory)
+        self.assertEqual((result["events"], result["receipts"]), (1, 1))
+        self.assertEqual(result["transactions_recovered"]["committed"], 1)
+
     def test_truncated_tail_refuses(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = pathlib.Path(directory) / "crossings/events/2026/11/events.jsonl"
@@ -330,6 +372,8 @@ class CrossingTests(unittest.TestCase):
                 crossing.verify(home=directory)
 
     def test_repository_worktree_and_symlink_escape_refuse(self):
+        with self.assertRaisesRegex(crossing.CrossingError, "filesystem root"):
+            crossing.resolve_home(pathlib.Path(pathlib.Path.cwd().anchor))
         inside = pathlib.Path(crossing.REPOSITORY_ROOT) / "synthetic-continuity-home"
         with self.assertRaisesRegex(crossing.CrossingError, "inside the repository"):
             crossing.resolve_home(inside)
@@ -346,6 +390,7 @@ class CrossingTests(unittest.TestCase):
                 self.skipTest("symlink creation unavailable")
             with self.assertRaisesRegex(crossing.CrossingError, "escapes continuity home"):
                 crossing.ingest(self.event(), home=home)
+            self.assertFalse((pathlib.Path(outside) / ".ledger.lock").exists())
 
     def test_receipt_tampering_and_missing_artifact_refuse(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -355,6 +400,12 @@ class CrossingTests(unittest.TestCase):
             value["content_sha256"] = "f" * 64
             receipt.write_text(json.dumps(value) + "\n", encoding="utf-8")
             with self.assertRaisesRegex(crossing.CrossingError, "digest disagree"):
+                crossing.verify(home=directory)
+        with tempfile.TemporaryDirectory() as directory:
+            crossing.ingest(self.event(), home=directory)
+            ledger = next((pathlib.Path(directory) / "crossings/events").glob("*/*/*.jsonl"))
+            ledger.unlink()
+            with self.assertRaisesRegex(crossing.CrossingError, "missing artifact"):
                 crossing.verify(home=directory)
 
     def test_duplicate_and_replay_receipt_relationships_are_attributable(self):
@@ -382,6 +433,20 @@ class CrossingTests(unittest.TestCase):
             crossing.validate_receipt(replay)
         replay["replay_of"] = first["receipt_id"]
         crossing.validate_receipt(replay)
+        with tempfile.TemporaryDirectory() as directory:
+            event = self.event()
+            first = crossing.ingest(event, home=directory)
+            paths = crossing.resolve_home(directory)
+            replay = crossing._receipt(
+                when=dt.datetime.now(dt.timezone.utc),
+                outcome="success",
+                operation="replay",
+                event=event,
+                replay_of=first["receipt_id"],
+            )
+            crossing._write_standalone_receipt(paths, dt.datetime.now(dt.timezone.utc), replay)
+            result = crossing.verify(home=directory)
+        self.assertEqual((result["events"], result["receipts"]), (1, 2))
 
     def test_cli_help_append_and_private_nonleak(self):
         help_result = self.run_cli("crossing", "--help")
