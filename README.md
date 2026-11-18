@@ -170,7 +170,7 @@ The ears are how a recording arrives as measured body before it becomes meaning.
 
 ## H1 house crossing ledger
 
-H1 adds only local infrastructure: offline Draft 2020-12 schemas, an append-only external event ledger, immutable receipts, and sanitized dead-letter records. It does not connect a live room, ingest real conversations, deliver context, or change canonical continuity.
+H1 adds only local infrastructure: bundled Draft 2020-12 schemas, offline validation, an append-only external event ledger, immutable attempt receipts, and sanitized dead-letter records. It does not connect a live room, ingest real conversations, deliver context, or change canonical continuity.
 
 Set `GLITCH_CONTINUITY_HOME` to an external non-repository directory. Use placeholder-only inputs:
 
@@ -181,4 +181,25 @@ python -m daemon_vessel crossing packet-validate --source path/to/synthetic-cont
 python -m daemon_vessel crossing verify
 ```
 
-The runtime keeps H1 data beneath `crossings/events`, `crossings/receipts`, `crossings/dead-letter`, and `context-packets` within that external home. Failures create sanitized dead-letter receipts; inspect those structural records rather than retrying with private payloads. H1 never installs schemas into a live home or connects Discord, Chat, Work, Telegram, or Sensorium.
+The accepted event bytes are read once, hashed before parsing, and validated without network retrieval. `--expect-sha256` is optional, but when supplied it must be exactly 64 lowercase hexadecimal characters and must match that same snapshot. Validation keeps actor identity, runtime evidence, surface identity, and event identity separate. H1 refuses canonical mutation authority and any content envelope that ambiguously supplies both or neither of `inline` and `ref`.
+
+Transport fidelity is evidence-bearing rather than inferred. `exact_bytes_verified` requires raw-byte availability and a content digest. `rendered_content` requires rendered content and refuses raw-byte or fresh-room byte-verification claims. Upstream verification and fresh-room verification remain independent facts.
+
+Live H1 state is external to the repository:
+
+```text
+<continuity-home>/
+  crossings/
+    events/YYYY/MM/events.jsonl
+    receipts/YYYY/MM/*.json
+    dead-letter/YYYY/MM/*.json
+    transactions/<transaction-id>/
+```
+
+Event records remain valid `gltch.house-event/0.1.0` objects; ingestion metadata is not inserted into the event. Trustworthy native identities deduplicate on `surface_id + native_event_id`. When no native identity exists, the declared fallback key uses content digest, actor ID, room ID, and the event's UTC hour bucket. Re-ingesting a byte-equivalent event writes an attributable duplicate receipt linked to the original success receipt. Reuse of either an event ID or a source key for divergent content is refused and dead-lettered. Corrections and supersessions append new events and preserve their targets.
+
+The event append and its success receipt are one recoverable transaction. Staged artifacts and a transaction journal are written before publication; a caught write failure rolls both targets back, while a later `append` or `verify` recovers an interrupted process by either accepting the complete digest-matched pair or restoring the prior ledger. A per-home lock serializes ingestion and verification, rejects live contention, and recovers only expired locks whose recorded process is no longer alive. `verify` refuses truncated ledgers, schema-invalid records, missing or tampered artifacts, unpaired accepted events, divergent identities, and inconsistent duplicate receipts.
+
+Failures create structural dead-letter receipts containing sanitized codes, schema paths, and validator keywords—not payload values. Paths recorded in receipts are normalized relative paths inside the external home; Windows and POSIX traversal, repository/worktree targets, symlink escapes, credential-bearing locators, and external schema references are refused.
+
+`packet-validate` validates a candidate context packet only; H1 does not persist or deliver one. The bundled schemas stay in the installed package and are not copied into the live home. H1 connects no Discord, Chat, Work, Telegram, or Sensorium surface and performs no H2 work.

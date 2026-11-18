@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import pathlib
 import re
@@ -12,7 +13,15 @@ from daemon_vessel.mount import MountValidationError, build_mount_manifest, writ
 from daemon_vessel.registry import RegistryError, install as install_registry, resolve as resolve_registry, validate as validate_registry
 from daemon_vessel.access_index import AccessIndexError, install as install_access_index, resolve as resolve_access_index, validate as validate_access_index
 from daemon_vessel.state_builder import STATE_PATH, write_current_shrine_state
-from daemon_vessel.crossing import CrossingError, ingest as ingest_crossing, validate_event, validate_packet, verify as verify_crossing
+from daemon_vessel.crossing import (
+    CrossingError,
+    ingest as ingest_crossing,
+    read_json_snapshot,
+    validate_event,
+    validate_expected_sha256,
+    validate_packet,
+    verify as verify_crossing,
+)
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
 ROOT = MODULE_DIR.parent
@@ -482,24 +491,31 @@ def cmd_index_resolve(args: argparse.Namespace) -> int:
 
 
 def cmd_crossing_validate(args: argparse.Namespace) -> int:
-    value = json.loads(pathlib.Path(args.source).read_text(encoding="utf-8"))
+    _, value = read_json_snapshot(args.source, "crossing event")
     validate_event(value)
     print("validated crossing event")
     return 0
 
+
 def cmd_crossing_append(args: argparse.Namespace) -> int:
-    source = pathlib.Path(args.source)
-    raw = source.read_bytes()
-    if args.expect_sha256 and __import__("hashlib").sha256(raw).hexdigest() != args.expect_sha256:
-        raise CrossingError("refused: source digest does not match --expect-sha256")
-    receipt = ingest_crossing(json.loads(raw.decode("utf-8")), home=args.home)
+    raw, value = read_json_snapshot(args.source, "crossing event")
+    expected = validate_expected_sha256(args.expect_sha256)
+    if expected and hashlib.sha256(raw).hexdigest() != expected:
+        raise CrossingError(
+            "refused: source digest does not match --expect-sha256",
+            code="source_digest_mismatch",
+        )
+    receipt = ingest_crossing(value, home=args.home)
     print(json.dumps({"receipt_id": receipt["receipt_id"], "outcome": receipt["outcome"]}, sort_keys=True))
     return 0
 
+
 def cmd_crossing_packet(args: argparse.Namespace) -> int:
-    validate_packet(json.loads(pathlib.Path(args.source).read_text(encoding="utf-8")))
+    _, value = read_json_snapshot(args.source, "context packet")
+    validate_packet(value)
     print("validated context packet")
     return 0
+
 
 def cmd_crossing_verify(args: argparse.Namespace) -> int:
     print(json.dumps(verify_crossing(home=args.home), sort_keys=True))

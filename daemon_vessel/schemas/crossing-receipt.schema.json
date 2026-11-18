@@ -1,1 +1,100 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"gltch.crossing-receipt/0.1.0","type":"object","required":["schema","receipt_id","created_at","operation","outcome","idempotent_duplicate","dead_letter","artifact_paths"],"properties":{"schema":{"const":"gltch.crossing-receipt/0.1.0"},"receipt_id":{"type":"string","pattern":"^receipt:"},"created_at":{"type":"string","format":"date-time"},"operation":{"type":"string"},"outcome":{"enum":["success","duplicate","refused","partial","failed"]},"event_id":{"type":["string","null"]},"content_sha256":{"type":["string","null"]},"transport":{"type":["object","null"]},"idempotent_duplicate":{"type":"boolean"},"dead_letter":{"type":"boolean"},"failure_code":{"type":["string","null"]},"artifact_paths":{"type":"array","items":{"type":"string","pattern":"^(?!.*\\.\\.).*$"}}},"additionalProperties":false}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gltch.crossing-receipt/0.1.0",
+  "type": "object",
+  "required": [
+    "schema",
+    "receipt_id",
+    "created_at",
+    "operation",
+    "outcome",
+    "event_id",
+    "content_sha256",
+    "transport_fidelity",
+    "raw_bytes_available",
+    "idempotent_duplicate",
+    "dead_letter",
+    "failure",
+    "original_receipt_id",
+    "retry_of",
+    "replay_of",
+    "transaction_id",
+    "artifact_paths"
+  ],
+  "properties": {
+    "schema": {"const": "gltch.crossing-receipt/0.1.0"},
+    "receipt_id": {"type": "string", "pattern": "^receipt:[A-Za-z0-9_.!:-]{1,247}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "operation": {"enum": ["ingest", "validate", "verify", "replay"]},
+    "outcome": {"enum": ["success", "duplicate", "refused", "partial", "failed"]},
+    "event_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^event:[A-Za-z0-9_.!:-]{1,249}$"}
+      ]
+    },
+    "content_sha256": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      ]
+    },
+    "transport_fidelity": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "enum": [
+            "exact_bytes_verified",
+            "exact_bytes_unverified",
+            "rendered_content",
+            "user_relayed",
+            "derived_summary",
+            "unavailable"
+          ]
+        }
+      ]
+    },
+    "raw_bytes_available": {"type": ["boolean", "null"]},
+    "idempotent_duplicate": {"type": "boolean"},
+    "dead_letter": {"type": "boolean"},
+    "failure": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["code", "path", "keyword"],
+          "properties": {
+            "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+            "path": {"type": ["string", "null"], "pattern": "^\\$"},
+            "keyword": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_$.-]{1,64}$"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "original_receipt_id": {"$ref": "#/$defs/nullableReceiptId"},
+    "retry_of": {"$ref": "#/$defs/nullableReceiptId"},
+    "replay_of": {"$ref": "#/$defs/nullableReceiptId"},
+    "transaction_id": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^transaction:[A-Za-z0-9_.!:-]{1,243}$"}
+      ]
+    },
+    "artifact_paths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 2048},
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "nullableReceiptId": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^receipt:[A-Za-z0-9_.!:-]{1,247}$"}
+      ]
+    }
+  },
+  "additionalProperties": false
+}
