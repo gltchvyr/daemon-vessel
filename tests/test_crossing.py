@@ -354,10 +354,8 @@ class CrossingTests(unittest.TestCase):
                 crossing.verify(home=directory)
 
     def test_stale_lock_recovers_and_live_lock_refuses(self):
-        invalid_pid = OSError("invalid process identifier")
-        invalid_pid.winerror = 87
         with mock.patch.object(crossing.os, "name", "nt"), mock.patch.object(
-            crossing.os, "kill", side_effect=invalid_pid
+            crossing, "_pid_alive_windows", return_value=False
         ):
             self.assertFalse(crossing._pid_alive(99999999))
         with tempfile.TemporaryDirectory() as directory:
