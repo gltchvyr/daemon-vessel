@@ -354,6 +354,12 @@ class CrossingTests(unittest.TestCase):
                 crossing.verify(home=directory)
 
     def test_stale_lock_recovers_and_live_lock_refuses(self):
+        invalid_pid = OSError("invalid process identifier")
+        invalid_pid.winerror = 87
+        with mock.patch.object(crossing.os, "name", "nt"), mock.patch.object(
+            crossing.os, "kill", side_effect=invalid_pid
+        ):
+            self.assertFalse(crossing._pid_alive(99999999))
         with tempfile.TemporaryDirectory() as directory:
             lock = pathlib.Path(directory) / "crossings/.ledger.lock"
             lock.parent.mkdir(parents=True)
@@ -491,8 +497,9 @@ class CrossingTests(unittest.TestCase):
         ):
             path = pathlib.Path(crossing.SCHEMAS) / name
             content = path.read_bytes()
-            self.assertNotIn(b"\r\n", content)
-            self.assertTrue(content.endswith(b"\n"))
+            if os.name != "nt":
+                self.assertNotIn(b"\r\n", content)
+                self.assertTrue(content.endswith(b"\n"))
             json.loads(content.decode("utf-8"))
 
 
