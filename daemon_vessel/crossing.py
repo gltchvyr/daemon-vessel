@@ -431,7 +431,9 @@ def _pid_alive(pid: int) -> bool | None:
         return False
     except PermissionError:
         return True
-    except OSError:
+    except OSError as exc:
+        if os.name == "nt" and getattr(exc, "winerror", None) == 87:
+            return False
         return None
     return True
 
