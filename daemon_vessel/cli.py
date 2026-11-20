@@ -22,6 +22,7 @@ from daemon_vessel.crossing import (
     validate_packet,
     verify as verify_crossing,
 )
+from daemon_vessel.h2 import confirm as confirm_h2, process as process_h2, verify as verify_h2
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
 ROOT = MODULE_DIR.parent
@@ -520,6 +521,17 @@ def cmd_crossing_packet(args: argparse.Namespace) -> int:
 def cmd_crossing_verify(args: argparse.Namespace) -> int:
     print(json.dumps(verify_crossing(home=args.home), sort_keys=True))
     return 0
+def cmd_h2_process(args: argparse.Namespace) -> int:
+    print(json.dumps(process_h2(args.source,args.expect_sha256,args.home),sort_keys=True)); return 0
+def cmd_h2_prepare(args: argparse.Namespace) -> int:
+    print(json.dumps(process_h2(args.source,args.expect_sha256,args.home,mode="prepare"),sort_keys=True)); return 0
+def cmd_h2_confirm(args: argparse.Namespace) -> int:
+    print(json.dumps(confirm_h2(args.challenge,args.home),sort_keys=True)); return 0
+def cmd_h2_validate(args: argparse.Namespace) -> int:
+    from daemon_vessel.h2 import _read_admission
+    _read_admission(args.source,args.expect_sha256); print("validated Hermes admission"); return 0
+def cmd_h2_verify(args: argparse.Namespace) -> int:
+    print(json.dumps(verify_h2(args.home),sort_keys=True)); return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -633,6 +645,18 @@ def build_parser() -> argparse.ArgumentParser:
     crossing_verify = crossing_subparsers.add_parser("verify", help="Verify installed H1 ledgers and receipts.")
     crossing_verify.add_argument("--home", help="Explicit external continuity home; overrides GLITCH_CONTINUITY_HOME.")
     crossing_verify.set_defaults(func=cmd_crossing_verify)
+    h2_parser = subparsers.add_parser("h2", help="Offline Hermes admission processing and verification.")
+    h2_subparsers = h2_parser.add_subparsers(dest="h2_command", required=True)
+    h2_process = h2_subparsers.add_parser("process", help="Validate and process one synthetic pilot or ACK snapshot.")
+    h2_process.add_argument("--source", required=True); h2_process.add_argument("--expect-sha256", required=True); h2_process.add_argument("--home", required=True); h2_process.set_defaults(func=cmd_h2_process)
+    h2_validate = h2_subparsers.add_parser("validate", help="Validate one offline Hermes admission without writing artifacts.")
+    h2_validate.add_argument("--source", required=True); h2_validate.add_argument("--expect-sha256", required=True); h2_validate.set_defaults(func=cmd_h2_validate)
+    h2_prepare = h2_subparsers.add_parser("prepare", help="Prepare a pilot chain without recording gateway submission.")
+    h2_prepare.add_argument("--source", required=True); h2_prepare.add_argument("--expect-sha256", required=True); h2_prepare.add_argument("--home", required=True); h2_prepare.set_defaults(func=cmd_h2_prepare)
+    h2_confirm = h2_subparsers.add_parser("confirm", help="Record a previously prepared reply after local validation.")
+    h2_confirm.add_argument("--challenge", required=True); h2_confirm.add_argument("--home", required=True); h2_confirm.set_defaults(func=cmd_h2_confirm)
+    h2_verify = h2_subparsers.add_parser("verify", help="Verify the complete local H2 receipt chain.")
+    h2_verify.add_argument("--home", required=True); h2_verify.set_defaults(func=cmd_h2_verify)
 
     return parser
 

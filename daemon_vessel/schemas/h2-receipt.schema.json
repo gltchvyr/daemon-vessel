@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gltch.h2-receipt/0.1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "receipt_id", "created_at", "transaction_id", "kind", "outcome", "source_event", "packet_id", "return_event", "challenge_id", "ack_event", "session_key_sha256", "failure", "original_receipt_id", "artifact_paths", "sha256"],
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "construction"}}}, "then": {"properties": {"outcome": {"const": "constructed"}, "ack_event": {"const": null}, "failure": {"const": null}, "original_receipt_id": {"const": null}}}},
+    {"if": {"properties": {"kind": {"const": "delivery"}}}, "then": {"properties": {"outcome": {"const": "submitted_to_gateway"}, "ack_event": {"const": null}, "failure": {"const": null}, "original_receipt_id": {"const": null}}}},
+    {"if": {"properties": {"kind": {"const": "observation"}}}, "then": {"properties": {"outcome": {"const": "round_trip_observed"}, "failure": {"const": null}, "original_receipt_id": {"const": null}}, "required": ["ack_event"]}},
+    {"if": {"properties": {"kind": {"const": "refusal"}}}, "then": {"properties": {"outcome": {"const": "refused"}}, "required": ["failure"]}},
+    {"if": {"properties": {"kind": {"enum": ["replay", "duplicate"]}}}, "then": {"properties": {"outcome": {"const": "duplicate"}}, "required": ["original_receipt_id"]}}
+  ],
+  "properties": {
+    "schema": {"const": "gltch.h2-receipt/0.1.0"},
+    "receipt_id": {"type": "string", "pattern": "^receipt:"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "transaction_id": {"type": "string", "pattern": "^transaction:"},
+    "kind": {"enum": ["construction", "delivery", "observation", "refusal", "replay", "duplicate"]},
+    "outcome": {"enum": ["constructed", "submitted_to_gateway", "round_trip_observed", "refused", "duplicate"]},
+    "source_event": {"type": "string", "pattern": "^event:"},
+    "packet_id": {"type": "string", "pattern": "^packet:"},
+    "return_event": {"type": "string", "pattern": "^event:"},
+    "challenge_id": {"type": "string", "pattern": "^challenge:"},
+    "ack_event": {"type": ["string", "null"], "pattern": "^event:"},
+    "session_key_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "failure": {"type": ["string", "null"], "maxLength": 64},
+    "original_receipt_id": {"type": ["string", "null"], "pattern": "^receipt:"},
+    "artifact_paths": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^crossings/"}},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

@@ -543,6 +543,15 @@ class _LedgerLock:
             self.path.unlink(missing_ok=True)
 
 
+def serialization_lock(path: pathlib.Path) -> _LedgerLock:
+    """Return a stale-recovering, Windows-aware lock for an external ledger.
+
+    H2 uses a distinct lock path so it never recursively acquires the H1
+    ledger lock while delegating an event to :func:`ingest`.
+    """
+    return _LedgerLock(path)
+
+
 def _source_key(event: dict[str, Any]) -> str:
     source = event["source"]
     if source["native_event_id"] is not None:
