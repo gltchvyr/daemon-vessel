@@ -45,6 +45,9 @@ class UnknownEntryIdError(AccessIndexError):
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
 REPOSITORY_ROOT = MODULE_DIR.parent
 FORMAT_CHECKER = FormatChecker()
+RFC3339_FALLBACK = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$"
+)
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,7 @@ def _freeze(value: object) -> object:
 if "date-time" not in FORMAT_CHECKER.checkers:
     @FORMAT_CHECKER.checks("date-time")
     def _is_date_time(value: object) -> bool:
-        if not isinstance(value, str) or "T" not in value or not re.search(r"(?:Z|[+-]\\d{2}:\\d{2})$", value):
+        if not isinstance(value, str) or not RFC3339_FALLBACK.fullmatch(value):
             return False
         try:
             dt.datetime.fromisoformat(value.replace("Z", "+00:00"))

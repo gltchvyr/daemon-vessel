@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import io
 import json
 import tempfile
@@ -104,6 +105,101 @@ class AccessIndexTests(unittest.TestCase):
             with self.assertRaises(access_index.UnknownEntryIdError): access_index.resolve("missing", home=home)
             (home / "registry" / "resources.json").write_text("{}", encoding="utf-8")
             with self.assertRaises(access_index.AccessIndexError): access_index.validate(home=home)
+
+    def test_forced_rfc3339_fallback_accepts_offsets_and_refuses_invalid_forms(self) -> None:
+        """Exercise the module's registered fallback, not the optional checker."""
+        without_date_time = dict(access_index.FormatChecker.checkers)
+        without_date_time.pop("date-time", None)
+        try:
+            with patch.object(access_index.FormatChecker, "checkers", without_date_time):
+                importlib.reload(access_index)
+                checker = access_index.FORMAT_CHECKER.checkers["date-time"][0]
+                self.assertEqual(access_index.__name__, checker.__module__)
+                self.assertEqual("_is_date_time", checker.__name__)
+                registry_snapshot = registry.validate_snapshot(
+                    json.dumps(registry_payload()).encode(), json.dumps(RESOURCE_SCHEMA).encode()
+                )
+                for value in (
+                    "2026-11-11T00:00:00-05:00",  # exact installed Access Index value
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00+05:30",
+                    "2026-01-01T00:00:00-05:00",
+                    "2026-01-01T00:00:00+00:00",
+                    "2026-01-01T23:59:59Z",
+                    "2026-01-01T23:59:59.123456+05:30",
+                ):
+                    with self.subTest(valid=value):
+                        payload = index_payload(); payload["generated_at"] = value
+                        access_index.validate_snapshot(
+                            json.dumps(payload).encode(), json.dumps(INDEX_SCHEMA).encode(), registry_snapshot.value
+                        )
+                for value in (
+                    "2026-01-01T00:00:00-5:00",
+                    "2026-01-01T00:00:00-0500",
+                    "2026-01-01T00:00:00-05:60",
+                    "2026-01-01T00:00:00+24:00",
+                    "2026-01-01T24:00:00Z",
+                    "2026-01-01T24:00:00+05:30",
+                    "2026-01-01T23:60:00Z",
+                    "2026-01-01T23:59:60Z",
+                    "2026-01-01T00:00:00",
+                    "2026-02-30T00:00:00Z",
+                    "not-a-date",
+                ):
+                    with self.subTest(invalid=value):
+                        payload = index_payload(); payload["generated_at"] = value
+                        with self.assertRaises(access_index.AccessIndexSchemaError):
+                            access_index.validate_snapshot(
+                                json.dumps(payload).encode(), json.dumps(INDEX_SCHEMA).encode(), registry_snapshot.value
+                            )
+        finally:
+            importlib.reload(access_index)
+
+    @unittest.skipUnless(
+        access_index.FORMAT_CHECKER.checkers["date-time"][0].__module__ != access_index.__name__,
+        "optional RFC 3339 checker unavailable in this runtime",
+    )
+    def test_fallback_matches_optional_checker_at_rfc3339_boundaries(self) -> None:
+        """The fallback and optional checker agree on this bounded boundary table."""
+        normal_checker = access_index.FORMAT_CHECKER
+        cases = {
+            "2026-11-11T00:00:00-05:00": True,
+            "2026-01-01T00:00:00Z": True,
+            "2026-01-01T00:00:00+05:30": True,
+            "2026-01-01T00:00:00-05:00": True,
+            "2026-01-01T00:00:00+00:00": True,
+            "2026-01-01T23:59:59Z": True,
+            "2026-01-01T23:59:59.123456+05:30": True,
+            "2026-01-01T24:00:00Z": False,
+            "2026-01-01T24:00:00+05:30": False,
+            "2026-01-01T23:60:00Z": False,
+            "2026-01-01T23:59:60Z": False,
+            "2026-01-01T00:00:00-05:60": False,
+            "2026-01-01T00:00:00+24:00": False,
+            "2026-01-01T00:00:00": False,
+            "2026-02-30T00:00:00Z": False,
+        }
+        without_date_time = dict(access_index.FormatChecker.checkers)
+        without_date_time.pop("date-time", None)
+        try:
+            with patch.object(access_index.FormatChecker, "checkers", without_date_time):
+                importlib.reload(access_index)
+                fallback_checker = access_index.FORMAT_CHECKER
+                for value, expected in cases.items():
+                    with self.subTest(value=value):
+                        self.assertEqual(expected, normal_checker.conforms(value, "date-time"))
+                        self.assertEqual(expected, fallback_checker.conforms(value, "date-time"))
+        finally:
+            importlib.reload(access_index)
+
+    def test_default_date_time_checker_accepts_valid_rfc3339(self) -> None:
+        registry_snapshot = registry.validate_snapshot(
+            json.dumps(registry_payload()).encode(), json.dumps(RESOURCE_SCHEMA).encode()
+        )
+        payload = index_payload(); payload["generated_at"] = "2026-01-01T00:00:00+05:30"
+        access_index.validate_snapshot(
+            json.dumps(payload).encode(), json.dumps(INDEX_SCHEMA).encode(), registry_snapshot.value
+        )
 
     def test_cli_never_leaks_sentinel_and_failure_rolls_back(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
