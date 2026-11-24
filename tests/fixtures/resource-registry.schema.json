@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://return-point.local/schema/resource-registry.schema.json",
+  "title": "Gl!tch resource registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "resources"],
+  "properties": {
+    "schema": { "const": "gltch.resource-registry/0.2.0" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "privacy",
+          "continuity_role",
+          "locator_state",
+          "locators"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "kind": {
+            "enum": [
+              "artifact", "conversation", "continuity_event", "diary_entry",
+              "loop_event", "image", "audio", "song", "document",
+              "repository", "project", "ritual", "room", "model_era",
+              "surface", "dataset", "other"
+            ]
+          },
+          "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "uniqueItems": true
+          },
+          "privacy": { "enum": ["private", "relational", "public", "mixed"] },
+          "continuity_role": {
+            "description": "Resource-level role in continuity governance; distinct from locator authority.",
+            "enum": ["canonical", "candidate", "evidence", "contract", "operational", "derived"]
+          },
+          "locator_state": {
+            "description": "Whether at least one current address is known. Reachability remains a locator-level status.",
+            "enum": ["resolved", "unresolved"]
+          },
+          "notes": { "type": "string", "maxLength": 4000 },
+          "locators": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["surface", "uri", "authority", "access_mode", "status"],
+              "properties": {
+                "surface": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "uri": { "type": "string", "minLength": 1, "maxLength": 2048 },
+                "authority": { "enum": ["original", "authoritative_mirror", "reviewed_copy", "derived", "pointer"] },
+                "access_mode": { "enum": ["direct", "connector", "library", "local", "manual", "unknown"] },
+                "status": { "enum": ["active", "stale", "unreachable", "unknown"] },
+                "version_ref": { "type": "string", "maxLength": 500 },
+                "content_hash": { "type": "string", "maxLength": 256 },
+                "last_verified": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "supersedes": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "uniqueItems": true
+          },
+          "related_resources": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "uniqueItems": true
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "locator_state": { "const": "resolved" } },
+              "required": ["locator_state"]
+            },
+            "then": { "properties": { "locators": { "minItems": 1 } } },
+            "else": { "properties": { "locators": { "maxItems": 0 } } }
+          }
+        ]
+      }
+    }
+  }
+}
+

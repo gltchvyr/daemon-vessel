@@ -14,6 +14,8 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from types import MappingProxyType
+from dataclasses import dataclass
 
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
@@ -53,6 +55,25 @@ class UnknownResourceIdError(RegistryError):
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
 REPOSITORY_ROOT = MODULE_DIR.parent
 FORMAT_CHECKER = FormatChecker()
+
+
+@dataclass(frozen=True)
+class ValidatedSnapshot:
+    """A validated, immutable registry byte snapshot for downstream consumers."""
+
+    raw: bytes
+    schema_raw: bytes
+    value: object
+    sha256: str
+    schema_sha256: str
+
+
+def _freeze(value: object) -> object:
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(child) for key, child in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(child) for child in value)
+    return value
 
 
 if "date-time" not in FORMAT_CHECKER.checkers:
@@ -166,6 +187,46 @@ def _validate(registry: object, schema: object) -> None:
     ids = [resource["id"] for resource in registry["resources"]]
     if len(ids) != len(set(ids)):
         raise DuplicateResourceIdError("refused: duplicate stable resource IDs")
+
+
+def validate_snapshot(registry_bytes: bytes, schema_bytes: bytes, *, expected_sha256: str | None = None) -> ValidatedSnapshot:
+    """Validate one captured Registry snapshot without rereading installed files.
+
+    Callers that have acquired bytes atomically can use this public boundary to
+    retain those exact attested bytes through planning and hydration.
+    """
+    actual = _sha256(registry_bytes)
+    if expected_sha256 is not None and actual != expected_sha256:
+        raise RegistryDigestMismatchError("refused: registry snapshot digest mismatch")
+    value = _decode_json(registry_bytes, "registry snapshot")
+    schema = _decode_json(schema_bytes, "registry schema snapshot")
+    _validate(value, schema)
+    return ValidatedSnapshot(registry_bytes, schema_bytes, _freeze(value), actual, _sha256(schema_bytes))
+
+
+def validate_installed_snapshot(*, home: str | pathlib.Path | None = None) -> ValidatedSnapshot:
+    """Own the complete installed Registry evidence bundle in one public API."""
+    paths = resolve_home(home)
+    registry_bytes = _read_bytes(paths.registry, "installed registry")
+    schema_bytes = _read_bytes(paths.schema, "installed schema")
+    digest_bytes = _read_bytes(paths.digest, "installed registry digest")
+    receipt_bytes = _read_bytes(paths.receipt, "installation receipt")
+    try:
+        digest = digest_bytes.decode("ascii")
+    except UnicodeError as exc:
+        raise RegistryDigestMismatchError("refused: malformed installed registry digest") from exc
+    if not re.fullmatch(r"[0-9a-f]{64}\n", digest):
+        raise RegistryDigestMismatchError("refused: malformed installed registry digest")
+    receipt = _decode_json(receipt_bytes, "installation receipt")
+    if not isinstance(receipt, dict):
+        raise RegistrySchemaError("refused: installation receipt must be an object")
+    snapshot = validate_snapshot(registry_bytes, schema_bytes, expected_sha256=digest[:-1])
+    if receipt.get("registry_sha256") != snapshot.sha256 or receipt.get("schema_sha256") != snapshot.schema_sha256:
+        raise RegistryDigestMismatchError("refused: installed Registry receipt linkage mismatch")
+    schema = _decode_json(schema_bytes, "installed schema")
+    if not isinstance(schema, dict) or receipt.get("schema_id") != schema.get("$id"):
+        raise RegistrySchemaError("refused: installation receipt schema ID mismatch")
+    return snapshot
 
 
 def _atomic_write(path: pathlib.Path, content: bytes) -> None:
