@@ -23,6 +23,7 @@ from daemon_vessel.crossing import (
     verify as verify_crossing,
 )
 from daemon_vessel.h2 import confirm as confirm_h2, process as process_h2, verify as verify_h2
+from daemon_vessel.h3 import candidate_append as append_h3_candidate, candidate_validate as validate_h3_candidate, build as build_h3, request_validate as validate_h3_request, verify as verify_h3
 
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
 ROOT = MODULE_DIR.parent
@@ -532,6 +533,16 @@ def cmd_h2_validate(args: argparse.Namespace) -> int:
     _read_admission(args.source,args.expect_sha256); print("validated Hermes admission"); return 0
 def cmd_h2_verify(args: argparse.Namespace) -> int:
     print(json.dumps(verify_h2(args.home),sort_keys=True)); return 0
+def cmd_context_request_validate(args: argparse.Namespace) -> int:
+    value=validate_h3_request(args.source,args.expect_sha256); print(json.dumps({"request_id":value["request_id"],"status":"validated"},sort_keys=True)); return 0
+def cmd_context_build(args: argparse.Namespace) -> int:
+    value=build_h3(args.source,args.expect_sha256,args.home); print(json.dumps({"packet_id":value["packet_id"],"status":value["status"]},sort_keys=True)); return 0
+def cmd_context_candidate_validate(args: argparse.Namespace) -> int:
+    value=validate_h3_candidate(args.source,args.expect_sha256); print(json.dumps({"candidate_id":value["candidate_id"],"status":"validated"},sort_keys=True)); return 0
+def cmd_context_candidate_append(args: argparse.Namespace) -> int:
+    value=append_h3_candidate(args.source,args.expect_sha256,args.home); print(json.dumps({"candidate_id":value["candidate_id"],"status":"recorded"},sort_keys=True)); return 0
+def cmd_context_verify(args: argparse.Namespace) -> int:
+    print(json.dumps(verify_h3(args.home),sort_keys=True)); return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -657,6 +668,18 @@ def build_parser() -> argparse.ArgumentParser:
     h2_confirm.add_argument("--challenge", required=True); h2_confirm.add_argument("--home", required=True); h2_confirm.set_defaults(func=cmd_h2_confirm)
     h2_verify = h2_subparsers.add_parser("verify", help="Verify the complete local H2 receipt chain.")
     h2_verify.add_argument("--home", required=True); h2_verify.set_defaults(func=cmd_h2_verify)
+    context_parser = subparsers.add_parser("context", help="Build and verify bounded offline H3 context artifacts.")
+    context_subparsers = context_parser.add_subparsers(dest="context_command", required=True)
+    context_request = context_subparsers.add_parser("request-validate", help="Validate one H3 request without writing artifacts.")
+    context_request.add_argument("--source",required=True); context_request.add_argument("--expect-sha256",required=True); context_request.set_defaults(func=cmd_context_request_validate)
+    context_build = context_subparsers.add_parser("build", help="Build one bounded H3 context packet in an external home.")
+    context_build.add_argument("--source",required=True); context_build.add_argument("--expect-sha256",required=True); context_build.add_argument("--home",required=True); context_build.set_defaults(func=cmd_context_build)
+    context_candidate = context_subparsers.add_parser("candidate-validate", help="Validate one H3 candidate delta without writing artifacts.")
+    context_candidate.add_argument("--source",required=True); context_candidate.add_argument("--expect-sha256",required=True); context_candidate.set_defaults(func=cmd_context_candidate_validate)
+    context_append = context_subparsers.add_parser("candidate-append", help="Record a verified H3 candidate in an external home.")
+    context_append.add_argument("--source",required=True); context_append.add_argument("--expect-sha256",required=True); context_append.add_argument("--home",required=True); context_append.set_defaults(func=cmd_context_candidate_append)
+    context_verify = context_subparsers.add_parser("verify", help="Verify offline H3 packets, candidates, and receipts.")
+    context_verify.add_argument("--home",required=True); context_verify.set_defaults(func=cmd_context_verify)
 
     return parser
 

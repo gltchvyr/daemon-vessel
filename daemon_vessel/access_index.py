@@ -10,6 +10,8 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from types import MappingProxyType
+from collections.abc import Mapping
 
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
@@ -43,6 +45,25 @@ class UnknownEntryIdError(AccessIndexError):
 MODULE_DIR = pathlib.Path(__file__).resolve().parent
 REPOSITORY_ROOT = MODULE_DIR.parent
 FORMAT_CHECKER = FormatChecker()
+
+
+@dataclass(frozen=True)
+class ValidatedSnapshot:
+    """A validated immutable Access Index byte snapshot."""
+
+    raw: bytes
+    schema_raw: bytes
+    value: object
+    sha256: str
+    schema_sha256: str
+
+
+def _freeze(value: object) -> object:
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(child) for key, child in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(child) for child in value)
+    return value
 
 
 if "date-time" not in FORMAT_CHECKER.checkers:
@@ -151,7 +172,7 @@ def _validate_semantics(index: object, installed_registry: dict) -> None:
     if len(ids) != len(entries) or len(ids) != len(set(ids)):
         raise DuplicateEntryIdError("refused: duplicate stable entry IDs")
     entry_ids = set(ids)
-    resource_ids = {item.get("id") for item in installed_registry.get("resources", []) if isinstance(item, dict)}
+    resource_ids = {item.get("id") for item in installed_registry.get("resources", []) if isinstance(item, Mapping)}
     for entry in entries:
         for resource_id in entry.get("resource_ids", []):
             if resource_id not in resource_ids:
@@ -171,6 +192,49 @@ def _validate_semantics(index: object, installed_registry: dict) -> None:
             for target in graph[node]: visit(target)
             visiting.remove(node); visited.add(node)
     for node in graph: visit(node)
+
+
+def validate_snapshot(index_bytes: bytes, schema_bytes: bytes, registry_snapshot: object, *, expected_sha256: str | None = None) -> ValidatedSnapshot:
+    """Validate captured Access Index bytes against a captured Registry value.
+
+    This additive API deliberately never reads an installation, so callers can
+    prove that planning consumed the exact snapshot covered by their receipts.
+    """
+    actual = _sha256(index_bytes)
+    if expected_sha256 is not None and actual != expected_sha256:
+        raise AccessIndexDigestMismatchError("refused: access index snapshot digest mismatch")
+    value = _decode_json(index_bytes, "access index snapshot")
+    schema = _decode_json(schema_bytes, "access index schema snapshot")
+    _validate_schema(value, schema)
+    if not hasattr(registry_snapshot, "get"):
+        raise AccessIndexSchemaError("refused: invalid Registry snapshot")
+    _validate_semantics(value, registry_snapshot)
+    return ValidatedSnapshot(index_bytes, schema_bytes, _freeze(value), actual, _sha256(schema_bytes))
+
+
+def validate_installed_snapshot(registry_snapshot: object, *, home: str | pathlib.Path | None = None) -> ValidatedSnapshot:
+    """Own the complete installed Access Index evidence bundle publicly."""
+    paths = resolve_home(home)
+    index_bytes = _read_bytes(paths.index, "installed access index")
+    schema_bytes = _read_bytes(paths.schema, "installed schema")
+    digest_bytes = _read_bytes(paths.digest, "installed access index digest")
+    receipt_bytes = _read_bytes(paths.receipt, "installation receipt")
+    receipt_digest_bytes = _read_bytes(paths.receipt_digest, "installed receipt digest")
+    try:
+        digest, receipt_digest = digest_bytes.decode("ascii"), receipt_digest_bytes.decode("ascii")
+    except UnicodeError as exc:
+        raise AccessIndexDigestMismatchError("refused: malformed installed evidence digest") from exc
+    if not re.fullmatch(r"[0-9a-f]{64}\n", digest) or not re.fullmatch(r"[0-9a-f]{64}\n", receipt_digest):
+        raise AccessIndexDigestMismatchError("refused: malformed installed evidence digest")
+    receipt = _decode_json(receipt_bytes, "installation receipt")
+    if not isinstance(receipt, dict) or _sha256(receipt_bytes) != receipt_digest[:-1]:
+        raise AccessIndexDigestMismatchError("refused: installed receipt digest mismatch")
+    snapshot = validate_snapshot(index_bytes, schema_bytes, registry_snapshot, expected_sha256=digest[:-1])
+    schema = _decode_json(schema_bytes, "installed schema")
+    if (receipt.get("index_sha256") != snapshot.sha256 or receipt.get("schema_sha256") != snapshot.schema_sha256 or
+            not isinstance(schema, dict) or receipt.get("schema_id") != schema.get("$id")):
+        raise AccessIndexDigestMismatchError("refused: installed Access Index receipt linkage mismatch")
+    return snapshot
 
 
 def _atomic_write(path: pathlib.Path, content: bytes) -> None:

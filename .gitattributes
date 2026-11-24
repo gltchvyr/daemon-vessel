@@ -1,0 +1,8 @@
+tests/fixtures/resource-registry.schema.json -text
+tests/fixtures/access-index.schema.json -text
+tests/fixtures/context-packet-return-point-v0.1.schema.json -text
+daemon_vessel/schemas/context-packet-return-point-v0.1.schema.json -text
+daemon_vessel/schemas/context-request.schema.json -text
+daemon_vessel/schemas/context-packet-v0.2.schema.json -text
+daemon_vessel/schemas/candidate-delta.schema.json -text
+daemon_vessel/schemas/h3-receipt.schema.json -text

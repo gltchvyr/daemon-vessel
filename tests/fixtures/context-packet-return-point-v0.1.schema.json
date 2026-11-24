@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://return-point.local/schema/context-packet.schema.json",
+  "title": "Gl!tch bounded context packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "created_at", "query", "budget", "seeds", "resources", "traversal", "status"],
+  "properties": {
+    "schema": { "const": "gltch.context-packet/0.1.0" },
+    "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "query": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "intent": { "enum": ["current", "origin", "evolution", "difference", "correction", "project", "open"] },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_hops", "max_resources"],
+      "properties": {
+        "max_hops": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "max_resources": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_chars": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "seeds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+      "uniqueItems": true
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource_id", "reason", "authority"],
+        "properties": {
+          "resource_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "authority": { "enum": ["original", "authoritative_mirror", "reviewed_copy", "derived", "pointer"] },
+          "excerpt_ref": { "type": "string", "maxLength": 1000 },
+          "thin": { "type": "boolean" }
+        }
+      }
+    },
+    "traversal": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "edge", "reason"],
+        "properties": {
+          "from": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "to": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "edge": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "detail"],
+        "properties": {
+          "code": { "enum": ["no_seed_match", "known_unreachable", "budget_exhausted", "conflicting_sources", "pointer_dead_end", "other"] },
+          "detail": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      }
+    },
+    "status": { "enum": ["grounded", "partial", "unresolved"] },
+    "canonical_effect": { "const": "none" }
+  }
+}

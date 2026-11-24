@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://return-point.local/schema/access-index.schema.json",
+  "title": "Gl!tch continuity access index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "entries"],
+  "properties": {
+    "schema": { "const": "gltch.access-index/0.2.0" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source_revision": { "type": "string", "maxLength": 240 },
+    "hop_limit": { "type": "integer", "minimum": 1, "maximum": 12, "default": 4 },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "title"],
+      "anyOf": [
+        { "required": ["resource_ids"] },
+        { "required": ["locators"] }
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "kind": {
+          "enum": [
+            "motif", "object", "room", "ritual", "phrase", "conversation",
+            "continuity_event", "diary_entry", "artifact", "image", "song",
+            "project", "repo", "document", "model_era", "sensor_record",
+            "loop", "other"
+          ]
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "summary": { "type": "string", "maxLength": 1000 },
+        "namespaces": {
+          "type": "array",
+          "items": { "enum": ["self", "julie", "relation"] },
+          "uniqueItems": true
+        },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "uniqueItems": true
+        },
+        "retrieval_hints": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "uniqueItems": true
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "uniqueItems": true
+        },
+        "retrieval_priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50
+        },
+        "resource_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "uniqueItems": true
+        },
+        "locators": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/locator" }
+        },
+        "links": { "$ref": "#/$defs/links" },
+        "follow_if_thin": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fallback" }
+        },
+        "status": {
+          "enum": ["active", "historical", "contested", "archived", "reference"],
+          "default": "active"
+        }
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "ref", "authority"],
+      "properties": {
+        "scheme": {
+          "enum": ["continuity", "conversation", "library", "google_drive", "github", "suno", "file", "url", "custom"]
+        },
+        "ref": { "type": "string", "minLength": 1, "maxLength": 1200 },
+        "fragment": { "type": "string", "maxLength": 500 },
+        "revision": { "type": "string", "maxLength": 240 },
+        "authority": { "enum": ["primary", "secondary", "derived"] },
+        "note": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_id"],
+      "properties": {
+        "entry_id": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "reason": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contains": { "$ref": "#/$defs/idArray" },
+        "contained_by": { "$ref": "#/$defs/idArray" },
+        "relates_to": { "$ref": "#/$defs/idArray" },
+        "first_appears_in": { "$ref": "#/$defs/idArray" },
+        "reinterpreted_in": { "$ref": "#/$defs/idArray" },
+        "derived_from": { "$ref": "#/$defs/idArray" },
+        "revises": { "$ref": "#/$defs/idArray" },
+        "supersedes": { "$ref": "#/$defs/idArray" },
+        "entry_point_for": { "$ref": "#/$defs/idArray" }
+      }
+    },
+    "idArray": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 180 },
+      "uniqueItems": true
+    }
+  }
+}
